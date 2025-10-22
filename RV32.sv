@@ -5,45 +5,148 @@ module riscv_pipeline_top (
 );
 
     // Pipeline stage signals
-    logic [31:0] pc_if, pc_id, pc_ex, pc_mem, pc_wb;
+    logic [31:0] pc_if, pc_id, pc_ex;
+    logic [31:0] pc_plus_4_if, pc_plus_4_id, pc_plus_4_ex, pc_plus_4_mem;
+
     logic [31:0] instruction_if, instruction_id;
-    logic [31:0] rs1_data, rs2_data, rd_data_wb;
-    logic [31:0] alu_result_ex, alu_result_mem;
-    logic [31:0] mem_data_mem, mem_data_wb;
-    logic [4:0] rs1_addr, rs2_addr, rd_addr_id, rd_addr_ex, rd_addr_mem, rd_addr_wb;
+
+    // Register file pipeline signals
+    logic [31:0] rs1_data_id, rs2_data_id;
+    logic [31:0] rs1_data_ex, rs2_data_ex;
+    logic [31:0] rd_data_mem, rd_data_wb;
+
+    // Immediate
     logic [31:0] immediate_id, immediate_ex;
+
+    // ALU operands/results
     logic [31:0] alu_operand_a, alu_operand_b;
+    logic [31:0] alu_result_ex, alu_result_mem;
+
+    // Memory data
+    logic [31:0] mem_data;
+
+    // Register addresses
+    logic [4:0] rs1_addr, rs2_addr;
+    logic [4:0] rd_addr_id, rd_addr_ex, rd_addr_mem;
 
     // Control signals
-    logic reg_write_id, reg_write_ex, reg_write_mem, reg_write_wb;
     logic mem_read_id, mem_read_ex, mem_read_mem;
     logic mem_write_id, mem_write_ex, mem_write_mem;
-    logic branch_id, branch_ex;
-    logic jump_id, jump_ex;
-    logic alu_src_id, alu_src_ex;
-    logic [3:0] alu_op_id, alu_op_ex;
-    logic [2:0] mem_size_id, mem_size_ex, mem_size_mem;
+    logic branch, jump_id, jump_ex, jump_mem;
     logic mem_unsigned_id, mem_unsigned_ex, mem_unsigned_mem;
+    logic [1:0] mem_size_id, mem_size_ex, mem_size_mem;
+    logic [3:0] alu_op_id, alu_op_ex;
 
-    // Forwarding and hazard signals
-    logic [1:0] forward_a, forward_b;
-    logic stall_if, stall_id, flush_id, flush_ex;
-    logic hazard_detected;
+    // ALU source control
+    logic [1:0] alu_src_a_id, alu_src_b_id;
+    logic [1:0] alu_src_a_ex, alu_src_b_ex;
+    logic alu_imm_id, alu_imm_ex;
+    logic alu_pc_id, alu_pc_ex;
 
-    // Branch/Jump signals
+    // Branch compare
+    logic cmp_id, cmp_ex, cmp_mem;
+    logic cmp_imm;
+    logic [2:0] cmp_op;
+    logic cmp_result_id, cmp_result_ex, cmp_result_mem;
+
+    // Branch/PC control
     logic branch_taken;
     logic [31:0] pc_target;
+    logic pc_load_id, pc_load_ex;
+    logic [31:0] pc_next;
+
+    // Constant NOP
+    localparam logic [31:0] NOP = 32'h00000013; // ADDI x0,x0,0
+
+    // Pipeline Register Transfers
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            // ---------------- IF/ID Reset ----------------
+            pc_id          <= 32'b0;
+            pc_plus_4_id   <= 32'b0;
+
+            // ---------------- ID/EX Reset ----------------
+            pc_ex          <= 32'b0;
+            pc_plus_4_ex   <= 32'b0;
+            pc_load_ex     <= 1'b0;
+            rs1_data_ex    <= 32'b0;
+            rs2_data_ex    <= 32'b0;
+            immediate_ex   <= 32'b0;
+            rd_addr_ex     <= 5'b0;
+            mem_read_ex    <= 1'b0;
+            mem_write_ex   <= 1'b0;
+            mem_size_ex    <= 2'b0;
+            mem_unsigned_ex<= 1'b0;
+            alu_op_ex      <= 4'b0;
+            alu_src_a_ex   <= 2'b0;
+            alu_src_b_ex   <= 2'b0;
+            alu_imm_ex     <= 1'b0;
+            alu_pc_ex      <= 1'b0;
+            jump_ex        <= 1'b0;
+            cmp_ex         <= 1'b0;
+            cmp_result_ex  <= 1'b0;
+
+            // ---------------- EX/MEM Reset ----------------
+            pc_plus_4_mem   <= 32'b0;
+            alu_result_mem  <= 32'b0;
+            rs2_data_mem    <= 32'b0;
+            rd_addr_mem     <= 5'b0;
+            mem_read_mem    <= 1'b0;
+            mem_write_mem   <= 1'b0;
+            mem_size_mem    <= 2'b0;
+            mem_unsigned_mem<= 1'b0;
+            jump_mem        <= 1'b0;
+            cmp_mem         <= 1'b0;
+            cmp_result_mem  <= 1'b0;
+        end else begin
+            // ---------------- IF → ID ----------------
+            pc_id          <= pc_if;
+            pc_plus_4_id   <= pc_plus_4_if;
+
+            // ---------------- ID → EX ----------------
+            pc_ex          <= pc_id;
+            pc_plus_4_ex   <= pc_plus_4_id;
+            pc_load_ex     <= pc_load_id;
+            rs1_data_ex    <= rs1_data_id;
+            rs2_data_ex    <= rs2_data_id;
+            immediate_ex   <= immediate_id;
+            rd_addr_ex     <= rd_addr_id;
+            mem_read_ex    <= mem_read_id;
+            mem_write_ex   <= mem_write_id;
+            mem_size_ex    <= mem_size_id;
+            mem_unsigned_ex<= mem_unsigned_id;
+            alu_op_ex      <= alu_op_id;
+            alu_src_a_ex   <= alu_src_a_id;
+            alu_src_b_ex   <= alu_src_b_id;
+            alu_imm_ex     <= alu_imm_id;
+            alu_pc_ex      <= alu_pc_id;
+            jump_ex        <= jump_id;
+            cmp_ex         <= cmp_id;
+            cmp_result_ex  <= cmp_result_id;
+
+            // ---------------- EX → MEM ----------------
+            pc_plus_4_mem   <= pc_plus_4_ex;
+            alu_result_mem  <= alu_result_ex;
+            rs2_data_mem    <= rs2_data_ex;
+            rd_addr_mem     <= rd_addr_ex;
+            mem_read_mem    <= mem_read_ex;
+            mem_write_mem   <= mem_write_ex;
+            mem_size_mem    <= mem_size_ex;
+            mem_unsigned_mem<= mem_unsigned_ex;
+            jump_mem        <= jump_ex;
+            cmp_mem         <= cmp_ex;
+            cmp_result_mem  <= cmp_result_ex;
+        end
+    end
 
     assign branch_taken = cmp_result_id;
     assign pc_target = alu_result_ex;
 
     // stall two cycles on branches and jumps to fetch the correct instruction
-    assign pc_load_id = jump_id || (branch_id && branch_taken);
+    assign pc_load_id = jump_id || (branch && branch_taken);
 
-    always @(posedge clk) begin
-        pc_load_ex <= pc_load_id;
-
-        if (pc_load_id || pc_load_ex) instruction_id <= NOP;
+    always @(posedge clk or negedge rst_n) begin
+        if (pc_load_id || pc_load_ex || ~rst_n) instruction_id <= NOP;
         else instruction_id <= instruction_if;
     end
 
@@ -82,7 +185,7 @@ module riscv_pipeline_top (
         .rs1_addr(rs1_addr),
         .rs2_addr(rs2_addr),
         .rd_addr(rd_addr_id),
-        .branch(branch_id),
+        .branch(branch),
         .jump(jump_id),
         .compare(cmp_id),
         .cmp_imm(cmp_imm),
