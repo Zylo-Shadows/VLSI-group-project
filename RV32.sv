@@ -1,3 +1,6 @@
+`include "definitions.vh"
+import types::*
+
 module riscv_pipeline_top (
     input logic clk,
     input logic rst_n,
@@ -9,6 +12,7 @@ module riscv_pipeline_top (
     logic [31:0] pc_plus_4_if, pc_plus_4_id, pc_plus_4_ex, pc_plus_4_mem;
 
     logic [31:0] instruction_if, instruction_id;
+    inst_format_t inst_fmt;
 
     // Register file pipeline signals
     logic [31:0] rs1_data_id, rs2_data_id;
@@ -35,7 +39,7 @@ module riscv_pipeline_top (
     logic branch, jump_id, jump_ex, jump_mem;
     logic mem_unsigned_id, mem_unsigned_ex, mem_unsigned_mem;
     logic [1:0] mem_size_id, mem_size_ex, mem_size_mem;
-    logic [3:0] alu_op_id, alu_op_ex;
+    alu_op_t alu_op_id, alu_op_ex;
 
     // ALU source control
     logic [1:0] alu_src_a_id, alu_src_b_id;
@@ -46,7 +50,7 @@ module riscv_pipeline_top (
     // Branch compare
     logic cmp_id, cmp_ex, cmp_mem;
     logic cmp_imm;
-    logic [2:0] cmp_op;
+    cmp_op_t cmp_op;
     logic cmp_result_id, cmp_result_ex, cmp_result_mem;
 
     // Branch/PC control
@@ -54,9 +58,6 @@ module riscv_pipeline_top (
     logic [31:0] pc_target;
     logic pc_load_id, pc_load_ex;
     logic [31:0] pc_next;
-
-    // Constant NOP
-    localparam logic [31:0] NOP = 32'h00000013; // ADDI x0,x0,0
 
     // Pipeline Register Transfers
     always_ff @(posedge clk or negedge rst_n) begin
@@ -202,7 +203,7 @@ module riscv_pipeline_top (
     );
 
     immediate_builder IMMU (
-        .imm_type(inst_fmt)
+        .inst_fmt(inst_fmt)
         .instruction(instruction_id),
         .immediate(immediate_id)
     );
