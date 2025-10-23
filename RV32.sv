@@ -153,6 +153,7 @@ module riscv_pipeline_top (
     pc_reg pc (
         .clk(clk),
         .rst_n(rst_n),
+        .pc_start(boot_addr),
         .pc_load(pc_load_ex), 
         .pc_in(pc_target),
         .pc_out(pc_if),
@@ -163,6 +164,7 @@ module riscv_pipeline_top (
     instruction_memory imem (
         .clk(clk),
         .rst_n(rst_n),
+        .boot_addr(boot_addr),
         .addr(pc_next),
         .instruction(instruction_if)
     );
