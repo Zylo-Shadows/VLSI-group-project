@@ -1,7 +1,7 @@
 `include "definitions.vh"
 import types::*
 
-module riscv_pipeline_top (
+module RV32E (
     input logic clk,
     input logic rst_n,
     input logic [31:0] boot_addr
