@@ -99,6 +99,9 @@ module RV32E (
             jump_mem        <= 1'b0;
             cmp_mem         <= 1'b0;
             cmp_result_mem  <= 1'b0;
+
+            // ---------------- MEM/WB Reset ----------------
+            rd_data_wb      <= 32'b0;
         end else begin
             // ---------------- IF → ID ----------------
             pc_id          <= pc_if;
@@ -137,6 +140,9 @@ module RV32E (
             jump_mem        <= jump_ex;
             cmp_mem         <= cmp_ex;
             cmp_result_mem  <= cmp_result_ex;
+
+            // ---------------- MEM → WB ----------------
+            rd_data_wb      <= rd_data_mem;
         end
     end
 
@@ -177,7 +183,6 @@ module RV32E (
         .rs2_addr(rs2_addr),
         .rd_addr(rd_addr_mem),
         .rd_data(rd_data_mem),
-        .rd_data_out(rd_data_wb),
         .rs1_data(rs1_data_id),
         .rs2_data(rs2_data_id)
     );
