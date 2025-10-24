@@ -60,7 +60,7 @@ module RV32E (
     logic [31:0] pc_next;
 
     // Pipeline Register Transfers
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             // ---------------- IF/ID Reset ----------------
             pc_id          <= 32'b0;
@@ -146,8 +146,8 @@ module RV32E (
     // stall two cycles on branches and jumps to fetch the correct instruction
     assign pc_load_id = jump_id || (branch && branch_taken);
 
-    always @(posedge clk or negedge rst_n) begin
-        if (pc_load_id || pc_load_ex || ~rst_n) instruction_id <= NOP;
+    always @(posedge clk) begin
+        if (pc_load_id || pc_load_ex || !rst_n) instruction_id <= NOP;
         else instruction_id <= instruction_if;
     end
 
