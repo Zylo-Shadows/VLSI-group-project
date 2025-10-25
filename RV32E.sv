@@ -1,5 +1,5 @@
 `include "definitions.vh"
-import types::*
+import types::*;
 
 module RV32E (
     input logic clk,
