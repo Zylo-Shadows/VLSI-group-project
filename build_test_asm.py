@@ -257,10 +257,10 @@ def main(bin_file, instructions):
     instructions[:] = [".section .text", ".globl _start", "_start:"]+["nop"]*FILL
     expected_outputs = []
 
-    regs = list(range(16))
+    regs2test = [0, 1, 2, 4, 8, 15]
     for inst_name in instruction_names:
         for imm in [0x80000000, 0, 1, 0x7fffffff, 0xffffffff, *random.choices(range(2**32), k=3)]:
-            for rs1, rs2, rd in itertools.product(regs[0:2], repeat=3):
+            for rs1, rs2, rd in itertools.product(regs2test, repeat=3):
                 inst, outputs = build_inst(inst_name, rs1=rs1, rs2=rs2, rd=rd, imm=imm, decode_outputs=True)
                 instructions.append(inst)
                 expected_outputs.append(outputs)
