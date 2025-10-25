@@ -1,4 +1,4 @@
-import types::*
+import types::*;
 
 module instruction_decoder (
     input  logic [31:0]  instruction,
@@ -32,7 +32,7 @@ module instruction_decoder (
     logic [2:0] funct3;
     logic [6:0] funct7;
 
-    assign opcode = instruction[6:0];
+    assign opcode = opcode_t'(instruction[6:0]);
     assign rd_addr = instruction[11:7];
     assign funct3 = instruction[14:12];
     // rd <- U-immediate + 0 for LUI
@@ -55,7 +55,7 @@ module instruction_decoder (
         endcase
     end
 
-    assign cmp_op = funct3;
+    assign cmp_op = cmp_op_t'(funct3);
 
     always_comb begin
         {branch, jump, compare, cmp_imm, alu_imm, alu_pc} = 0;
@@ -63,23 +63,38 @@ module instruction_decoder (
 
         case (opcode)
             OP_OP: begin
-                alu_op = {funct7[5], funct3};
+                alu_op = alu_op_t'({funct7[5], funct3});
                 compare = (alu_op == ALU_SLT || alu_op == ALU_SLTU);
             end
 
             OP_OP_IMM: begin
-                alu_op = {funct7[5], funct3};
+                alu_op = alu_op_t'({funct7[5], funct3});
                 if (alu_op != ALU_SRA) alu_op[3] = 1'b0;
                 compare = (alu_op == ALU_SLT || alu_op == ALU_SLTU);
-                cmp_imm = alu_imm = 1;
+                cmp_imm = 1;
+                alu_imm = 1;
             end
 
             OP_LOAD, OP_STORE: alu_imm = 1;
-            OP_BRANCH: branch = alu_imm = alu_pc = 1;
+            OP_BRANCH: begin
+                branch = 1;
+                alu_imm = 1;
+                alu_pc = 1;
+            end
             OP_LUI: alu_imm = 1;
-            OP_AUIPC: alu_imm = alu_pc = 1;
-            OP_JAL: jump = alu_imm = alu_pc = 1;
-            OP_JALR: jump = alu_imm = 1;
+            OP_AUIPC: begin
+                alu_imm = 1;
+                alu_pc = 1;
+            end
+            OP_JAL: begin
+                jump = 1;
+                alu_imm = 1;
+                alu_pc = 1;
+            end
+            OP_JALR: begin
+                jump = 1;
+                alu_imm = 1;
+            end
         endcase
     end
 

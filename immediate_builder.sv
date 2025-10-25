@@ -1,4 +1,4 @@
-import types::inst_format_t
+import types::*;
 
 module immediate_builder (
     input  inst_format_t inst_fmt,
