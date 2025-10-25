@@ -42,16 +42,13 @@ module instruction_decoder (
 
     always_comb begin
         case (opcode)
-            OP_OP_IMM,
-            OP_LOAD,
-            OP_JALR,
-            OP_SYSTEM: instruction_format = I_TYPE;
+            OP_OP:     instruction_format = R_TYPE;
             OP_STORE:  instruction_format = S_TYPE;
             OP_BRANCH: instruction_format = B_TYPE;
             OP_LUI,
             OP_AUIPC:  instruction_format = U_TYPE;
             OP_JAL:    instruction_format = J_TYPE;
-            default:   instruction_format = R_TYPE;
+            default:   instruction_format = I_TYPE;
         endcase
     end
 
