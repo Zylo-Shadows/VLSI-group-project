@@ -55,22 +55,37 @@ module instruction_decoder (
         endcase
     end
 
-    assign cmp_op = cmp_op_t'(funct3);
+    always_comb begin
+        case (alu_op)
+            ALU_SLT: begin
+                compare = 1;
+                cmp_op = CMP_BLT;
+            end
+
+            ALU_SLTU: begin
+                compare = 1;
+                cmp_op = CMP_BLTU;
+            end
+
+            default: begin
+                compare = 0;
+                cmp_op = cmp_op_t'(funct3);
+            end
+        endcase
+    end
 
     always_comb begin
-        {branch, jump, compare, cmp_imm, alu_imm, alu_pc} = 0;
+        {branch, jump, cmp_imm, alu_imm, alu_pc} = 0;
         alu_op = ALU_ADD;
 
         case (opcode)
             OP_OP: begin
                 alu_op = alu_op_t'({funct7[5], funct3});
-                compare = (alu_op == ALU_SLT || alu_op == ALU_SLTU);
             end
 
             OP_OP_IMM: begin
                 alu_op = alu_op_t'({funct7[5], funct3});
                 if (alu_op != ALU_SRA) alu_op[3] = 1'b0;
-                compare = (alu_op == ALU_SLT || alu_op == ALU_SLTU);
                 cmp_imm = 1;
                 alu_imm = 1;
             end
