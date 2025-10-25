@@ -116,12 +116,12 @@ def build_inst(inst_name, rd, rs1, rs2, imm, decode_outputs=False):
     if imm >= 2**(isize-1) and inst_name not in LUI_AUIPC:
         imm -= 2**isize
 
-    args = f"x{rs2}" if inst_name in STORE else f"x{rd}"
+    args = f"x{rd}"
     if inst_name in LOAD:
         args += f", {imm}(x{rs1})"
         rs2 = None
     elif inst_name in STORE:
-        args += f", {imm}(x{rs1})"
+        args = f"x{rs2}, {imm}(x{rs1})"
         rd = None
     elif inst_name == "jal":
         args += f", .{imm:+d}"
@@ -143,9 +143,11 @@ def build_inst(inst_name, rd, rs1, rs2, imm, decode_outputs=False):
         rs2 = None
         imm = None
     elif inst_name in BRANCH:
-        args += f", x{rs1}, .{imm:+d}"
+        args = f"x{rs1}, x{rs2}, .{imm:+d}"
+        rd = None
     else:
         args += f", x{rs1}, {imm}"
+        rs2 = None
     inst = f"{inst_name} {args}"
     if not decode_outputs:
         return inst
@@ -175,6 +177,10 @@ def build_inst(inst_name, rd, rs1, rs2, imm, decode_outputs=False):
     else:
         mem_size = None
         mem_unsigned = None
+    if inst_name in {"nop", *MISC}:
+        compare = cmp_imm = alu_imm = alu_pc = mem_read = None
+    elif inst_name == "srai": # funct7 overlaps with imm for shift immediates
+        imm += 1024
     return inst, (imm, inst_type, rs1, rs2, rd, branch, jump, compare, cmp_imm, cmp_op, alu_imm, alu_pc, alu_op, mem_read, mem_write, mem_size, mem_unsigned)
 
 def assemble_riscv(asm_code: str, output_bin: str, march="rv32e", mabi="ilp32e"):
@@ -268,7 +274,7 @@ def main(bin_file, instructions):
     output = run_testbench("tb_decode", bin_file, "types.sv", "instruction_decoder.sv", "immediate_builder.sv")
 
     output_names = ("imm", "inst_type", "rs1", "rs2", "rd", "branch", "jump", "compare", "cmp_imm", "cmp_op", "alu_imm", "alu_pc", "alu_op", "mem_read", "mem_write", "mem_size", "mem_unsigned")
-    for i, outputs in enumerate(re.findall(r"^#?\s*([0-9a-f]+\s+(?:(?:[xX]|\d+)\s+)+(?:[xX]|\d+))", output, re.MULTILINE)):
+    for i, outputs in enumerate(re.findall(r"^#?\s*([0-9a-f]+\s+(?:(?:[xX]|\-?\d+)\s+)+(?:[xX]|\d+))$", output, re.MULTILINE)):
         outputs = outputs.split()
         for j, output in enumerate(expected_outputs[i]):
             if output is not None and str(int(output)) != outputs[j+1]:
