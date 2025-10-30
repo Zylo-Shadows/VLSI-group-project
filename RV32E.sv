@@ -37,8 +37,8 @@ module RV32E (
     logic mem_read_id, mem_read_ex, mem_read_mem;
     logic mem_write_id, mem_write_ex, mem_write_mem;
     logic branch, jump_id, jump_ex, jump_mem;
-    logic mem_unsigned_id, mem_unsigned_ex, mem_unsigned_mem;
-    logic [1:0] mem_size_id, mem_size_ex, mem_size_mem;
+    logic mem_unsigned_id, mem_unsigned_ex;
+    logic [1:0] mem_size_id, mem_size_ex;
     alu_op_t alu_op_id, alu_op_ex;
 
     // ALU source control
@@ -90,12 +90,9 @@ module RV32E (
             // ---------------- EX/MEM Reset ----------------
             pc_plus_4_mem   <= 32'b0;
             alu_result_mem  <= 32'b0;
-            rs2_data_mem    <= 32'b0;
             rd_addr_mem     <= 5'b0;
             mem_read_mem    <= 1'b0;
             mem_write_mem   <= 1'b0;
-            mem_size_mem    <= 2'b0;
-            mem_unsigned_mem<= 1'b0;
             jump_mem        <= 1'b0;
             cmp_mem         <= 1'b0;
             cmp_result_mem  <= 1'b0;
@@ -131,12 +128,9 @@ module RV32E (
             // ---------------- EX → MEM ----------------
             pc_plus_4_mem   <= pc_plus_4_ex;
             alu_result_mem  <= alu_result_ex;
-            rs2_data_mem    <= rs2_data_ex;
             rd_addr_mem     <= rd_addr_ex;
             mem_read_mem    <= mem_read_ex;
             mem_write_mem   <= mem_write_ex;
-            mem_size_mem    <= mem_size_ex;
-            mem_unsigned_mem<= mem_unsigned_ex;
             jump_mem        <= jump_ex;
             cmp_mem         <= cmp_ex;
             cmp_result_mem  <= cmp_result_ex;
@@ -208,7 +202,7 @@ module RV32E (
     );
 
     immediate_builder IMMU (
-        .inst_fmt(inst_fmt)
+        .inst_fmt(inst_fmt),
         .instruction(instruction_id),
         .immediate(immediate_id)
     );
@@ -251,7 +245,7 @@ module RV32E (
         .operand_a(alu_operand_a),
         .operand_b(alu_operand_b),
         .alu_op(alu_op_ex),
-        .result(alu_result_ex),
+        .result(alu_result_ex)
     );
 
     // TODO DSP module instantiation
