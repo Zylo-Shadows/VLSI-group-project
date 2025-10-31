@@ -3,22 +3,6 @@ ALU module which takes two operands of size 32-bits each and a 4 bit alu_op as i
 Operation is performed on the basis of alu_op value and output is 32-bit result.
 */
 
-/*
-ALU Control lines | Function
-
-----------------------------
-	0000	ALU_ADD
-	1000	ALU_SUB
-	0001	ALU_SLL
-	0010	ALU_SLT
-	0011	ALU_SLTU
-	0100	ALU_XOR
-	0101	ALU_SRL
-	1101	ALU_SRA
-	0110	ALU_OR
-	0111	ALU_AND
-*/
-
 import types::*;
 
 module ALU_32(
@@ -61,7 +45,7 @@ module ALU_32(
       ALU_AND: result = operand_a & operand_b;
 
       //Default case
-      default: 	result = 0;
+      default: 	result = x';
 
     endcase
 
