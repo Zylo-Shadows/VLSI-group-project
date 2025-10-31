@@ -36,7 +36,8 @@ module RV32E (
     // Control signals
     logic mem_read_id, mem_read_ex, mem_read_mem;
     logic mem_write_id, mem_write_ex, mem_write_mem;
-    logic branch, jump_id, jump_ex, jump_mem;
+    logic branch_id, branch_ex, branch_mem;
+    logic jump_id, jump_ex, jump_mem;
     logic mem_unsigned_id, mem_unsigned_ex;
     logic [1:0] mem_size_id, mem_size_ex;
     alu_op_t alu_op_id, alu_op_ex;
@@ -83,6 +84,7 @@ module RV32E (
             alu_src_b_ex   <= 2'b0;
             alu_imm_ex     <= 1'b0;
             alu_pc_ex      <= 1'b0;
+            branch_ex      <= 1'b0;
             jump_ex        <= 1'b0;
             cmp_ex         <= 1'b0;
             cmp_result_ex  <= 1'b0;
@@ -93,6 +95,7 @@ module RV32E (
             rd_addr_mem     <= 5'b0;
             mem_read_mem    <= 1'b0;
             mem_write_mem   <= 1'b0;
+            branch_mem      <= 1'b0;
             jump_mem        <= 1'b0;
             cmp_mem         <= 1'b0;
             cmp_result_mem  <= 1'b0;
@@ -121,6 +124,7 @@ module RV32E (
             alu_src_b_ex   <= alu_src_b_id;
             alu_imm_ex     <= alu_imm_id;
             alu_pc_ex      <= alu_pc_id;
+            branch_ex      <= branch_id;
             jump_ex        <= jump_id;
             cmp_ex         <= cmp_id;
             cmp_result_ex  <= cmp_result_id;
@@ -131,6 +135,7 @@ module RV32E (
             rd_addr_mem     <= rd_addr_ex;
             mem_read_mem    <= mem_read_ex;
             mem_write_mem   <= mem_write_ex;
+            branch_mem      <= branch_ex;
             jump_mem        <= jump_ex;
             cmp_mem         <= cmp_ex;
             cmp_result_mem  <= cmp_result_ex;
@@ -144,7 +149,7 @@ module RV32E (
     assign pc_target = alu_result_ex;
 
     // stall two cycles on branches and jumps to fetch the correct instruction
-    assign pc_load_id = jump_id || (branch && branch_taken);
+    assign pc_load_id = jump_id || (branch_id && branch_taken);
 
     always @(posedge clk) begin
         if (pc_load_id || pc_load_ex || !rst_n) instruction_id <= NOP;
@@ -173,6 +178,7 @@ module RV32E (
     register_file regfile (
         .clk(clk),
         .rst_n(rst_n),
+        .write_en(!branch_mem),
         .rs1_addr(rs1_addr),
         .rs2_addr(rs2_addr),
         .rd_addr(rd_addr_mem),
@@ -187,7 +193,7 @@ module RV32E (
         .rs1_addr(rs1_addr),
         .rs2_addr(rs2_addr),
         .rd_addr(rd_addr_id),
-        .branch(branch),
+        .branch(branch_id),
         .jump(jump_id),
         .compare(cmp_id),
         .cmp_imm(cmp_imm),
