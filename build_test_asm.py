@@ -1,4 +1,5 @@
 import itertools
+import operator as op
 import random
 import subprocess
 import tempfile
@@ -14,6 +15,14 @@ BRANCH = {"beq", "bne", "blt", "bge", "bltu", "bgeu"}
 LUI_AUIPC = {"lui", "auipc"}
 JUMP = {"jal", "jalr"}
 MISC = {"fence", "ecall", "ebreak"}
+
+def signed(x, bits=32):
+    x = x & ((1 << bits) - 1)
+    return x if x < 2**(bits-1) else x - 2**bits
+
+def unsigned(x, bits=32):
+    x = x & ((1 << bits) - 1)
+    return x if x >= 0 else x + 2**bits
 
 instruction_names = [*OP, *OP_IMM, *LOAD, *STORE, *BRANCH, *LUI_AUIPC, *JUMP, *MISC]
 
@@ -55,7 +64,7 @@ def imm_size(inst_type):
     #if inst_type == J_TYPE:
     return 21
 
-def build_inst(inst_name, rd, rs1, rs2, imm, decode_outputs=False):
+def build_inst(inst_name, rd=None, rs1=None, rs2=None, imm=None, decode_outputs=False):
     """
     Build a RISC-V assembly instruction string from operand components.
 
@@ -182,6 +191,116 @@ def build_inst(inst_name, rd, rs1, rs2, imm, decode_outputs=False):
     elif inst_name == "srai": # funct7 overlaps with imm for shift immediates
         imm += 1024
     return inst, (imm, inst_type, rs1, rs2, rd, branch, jump, compare, cmp_imm, cmp_op, alu_imm, alu_pc, alu_op, mem_read, mem_write, mem_size, mem_unsigned)
+
+def lui_offset(rd, imm):
+    ui_bits = (imm + 0x800) >> 12
+    offset = imm & 0xfff
+    if offset >= 0x800:
+        offset -= 0x1000
+    return build_inst("lui", rd, imm=ui_bits), offset
+
+def li32(rd, imm):
+    """Create lui + addi instructions to load a 32-bit value into a register"""
+    lui, offset = lui_offset(rd, imm)
+    return lui + "\n" + build_inst("addi", rd, rd, imm=offset)
+
+def ls32(inst_name, rd_rs, addr, rs1=5):
+    if inst_name in LOAD:
+        rd = rd_rs
+        rs = None
+    else:
+        rd = None
+        rs = rd_rs
+    lui, offset = lui_offset(rs1, addr)
+    return lui + "\n" + build_inst(inst_name, rd, rs1, rs2=rs, imm=offset)
+
+func = {
+    "add":  op.add,
+    "sub":  op.sub,
+    "and":  op.and_,
+    "or":   op.or_,
+    "xor":  op.xor,
+    "sll":  lambda x, y: x << (y & 0x1f),
+    "srl":  lambda x, y: unsigned(x) >> (y & 0x1f),
+    "sra":  lambda x, y: signed(x) >> (y & 0x1f),
+    "slt":  lambda x, y: signed(x) < signed(y),
+    "sltu": lambda x, y: unsigned(x) < unsigned(y),
+}
+
+class InstructionTest(object):
+    def __init__(self, inst_name, rd, rs1, rs2, v1, v2, out_addr, fill1="", fill2=""):
+        """
+        Create an object to help test the given instruciton.
+
+        Calling `self.test_sequence()` on the resulting object will create a
+        sequence of instructions to test the given instruction using the given
+        values and registers. v1 is the (effective) value loaded into rs1 and
+        v2 is the value loaded into rs2. v1 is an address for load/store
+        instructions. For immediate ops, v2 is used as an immediate baseline.
+        Use None to get a random value for v1 or v2.
+
+        fill1 is a string of filler instructions placed after rs1 is loaded
+        before the target instruction. fill2 is placed after the target
+        instruction before the final load to out_addr.
+
+        See also the docstring for `build_inst`.
+        """
+
+        if v1 is None:
+            v1 = random.randrange(2**32)
+        if v2 is None:
+            v2 = random.randrange(2**32)
+        self.inst_name = inst_name
+        self.rd, self.rs1, self.rs2 = rd, rs1, rs2
+        self.v1, self.v2 = v1, v2
+        self.out_addr = out_addr
+        self.lui1, self.offset1 = lui_offset(rs1, v1)
+        if inst_name in {*OP, *OP_IMM}:
+            imm = v2
+        elif inst_name in {*LOAD, *STORE}:
+            imm = self.offset1
+        # TODO BRANCH, LUI_AUIPC, JUMP, MISC
+        self.target_inst, do = build_inst(inst_name, rd, rs1, rs2, imm=imm, decode_outputs=True)
+        self.imm = do[0]
+        self.fill1 = fill1
+        self.fill2 = fill2
+
+    def test_sequence(self):
+        """
+        Create an instruction sequence to test this instruction.
+
+        Returns
+        -------
+        instructions, expected: str, int
+            Sequence of instructions and expected output value.
+        """
+
+        inst_name, rd, rs1, rs2 = self.inst_name, self.rd, self.rs1, self.rs2
+        v1, v2, imm = self.v1, self.v2, self.imm
+        if self.inst_name in {*LOAD, *STORE}:
+            waddr = (v1 >> 2) << 2
+            offset = v1 - waddr
+            bits = {'b': 8, 'h': 16, 'w': 32}[inst_name[1]]
+            instructions = [ls32("sw", 0, waddr)]
+        else:
+            instructions = []
+        sw = lw = addi1 = ""
+        if inst_name in LOAD:
+            sw = ls32("sw", rs2, waddr, rs1)
+            if inst_name.endswith('u'):
+                expected = unsigned(v2 << (offset*8), bits)
+            else:
+                expected = signed(v2 << (offset*8), bits)
+        elif inst_name in STORE:
+            lw = ls32("lw", rd, waddr, rs1)
+            expected = unsigned(v2, bits) << (offset*8)
+        elif inst_name in {*OP, *OP_IMM}:
+            addi1 = build_inst("addi", rs1, rs1, imm=self.offset1)
+            expected = signed(int(func[inst_name.replace('i', "")](v1, v2 if rs2 else imm)))
+        # TODO BRANCH, LUI_AUIPC, JUMP, MISC
+        instructions += [li32(rs2, v2), sw, self.lui1, self.fill1, addi1, self.target_inst, self.fill2, lw]
+        instructions.append(ls32("sw", rd, self.out_addr))
+        return "\n".join(instructions), signed(expected) if rd else 0
 
 def assemble_riscv(asm_code: str, output_bin: str, march="rv32e", mabi="ilp32e"):
     """Compile RISC-V assembly string to a raw binary file."""
