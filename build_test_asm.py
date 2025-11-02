@@ -116,14 +116,17 @@ def build_inst(inst_name, rd=None, rs1=None, rs2=None, imm=None, decode_outputs=
     isize = imm_size(inst_type)
     if imm is None:
         imm = random.randrange(2**isize)
-    while imm >= 2**isize:
-        imm >>= 1
-    if inst_name == "jal" or inst_name in BRANCH:
-        imm &= 0xfffffffe
-    if inst_name in {"sll", "srl", "sra", "slli", "srli", "srai"}:
-        imm %= 32
-    if imm >= 2**(isize-1) and inst_name not in LUI_AUIPC:
-        imm -= 2**isize
+    try:
+        while imm >= 2**isize:
+            imm >>= 1
+        if inst_name == "jal" or inst_name in BRANCH:
+            imm &= 0xfffffffe
+        if inst_name in {"sll", "srl", "sra", "slli", "srli", "srai"}:
+            imm %= 32
+        if imm >= 2**(isize-1) and inst_name not in LUI_AUIPC:
+            imm -= 2**isize
+    except TypeError: # imm is a string (label)
+        pass
 
     args = f"x{rd}"
     if inst_name in LOAD:
@@ -133,7 +136,10 @@ def build_inst(inst_name, rd=None, rs1=None, rs2=None, imm=None, decode_outputs=
         args = f"x{rs2}, {imm}(x{rs1})"
         rd = None
     elif inst_name == "jal":
-        args += f", .{imm:+d}"
+        if isinstance(imm, str):
+            args += f", .{imm}"
+        else:
+            args += f", .{imm:+d}"
         rs1 = None
         rs2 = None
     elif inst_name in LUI_AUIPC:
@@ -152,7 +158,10 @@ def build_inst(inst_name, rd=None, rs1=None, rs2=None, imm=None, decode_outputs=
         rs2 = None
         imm = None
     elif inst_name in BRANCH:
-        args = f"x{rs1}, x{rs2}, .{imm:+d}"
+        if isinstance(imm, str):
+            args = f"x{rs1}, x{rs2}, .{imm}"
+        else:
+            args = f"x{rs1}, x{rs2}, .{imm:+d}"
         rd = None
     else:
         args += f", x{rs1}, {imm}"
@@ -225,25 +234,62 @@ func = {
     "sra":  lambda x, y: signed(x) >> (y & 0x1f),
     "slt":  lambda x, y: signed(x) < signed(y),
     "sltu": lambda x, y: unsigned(x) < unsigned(y),
+    "beq":  lambda x, y: unsigned(x) == unsigned(y),
+    "bne":  lambda x, y: unsigned(x) != unsigned(y),
+    "blt":  lambda x, y: signed(x) < signed(y),
+    "bge":  lambda x, y: signed(x) >= signed(y),
+    "bltu": lambda x, y: unsigned(x) < unsigned(y),
+    "bgeu": lambda x, y: unsigned(x) >= unsigned(y)
 }
 
 class InstructionTest(object):
-    def __init__(self, inst_name, rd, rs1, rs2, v1, v2, out_addr, fill1="", fill2=""):
+    def __init__(self, inst_name, rd, rs1, rs2, v1, v2, out_addr,
+                 fill1="", fill2="", forward=False, make_loop=False):
         """
         Create an object to help test the given instruciton.
 
         Calling `self.test_sequence()` on the resulting object will create a
         sequence of instructions to test the given instruction using the given
-        values and registers. v1 is the (effective) value loaded into rs1 and
-        v2 is the value loaded into rs2. v1 is an address for load/store
-        instructions. For immediate ops, v2 is used as an immediate baseline.
-        Use None to get a random value for v1 or v2.
+        values and registers.
 
-        fill1 is a string of filler instructions placed after rs1 is loaded
-        before the target instruction. fill2 is placed after the target
-        instruction before the final load to out_addr.
-
-        See also the docstring for `build_inst`.
+        Parameters
+        ----------
+        inst_name : str
+            The RISC-V instruction mnemonic (e.g. "add", "sub", "lw", "beq").
+        rd : int
+            Destination register index.
+        rs1 : int
+            First source register index.
+        rs2 : int
+            Second source register index.
+        v1 : int or None
+            Effective value loaded into rs1. For load/store instructions,
+            v1 is an address. Use None for a random value.
+        v2 : int or None
+            Value loaded into rs2. For immediate ops, v2 is used as an
+            immediate baseline. Use None for a random value.
+        out_addr : int
+            Address to store the final result.
+        fill1 : list[str] or InstructionTest, optional
+            Filler instructions placed after rs1 is loaded before the
+            target instruction. fill2 is  For branches, this should be an
+            InstructionTest object representing a test sequence for the taken
+            branch. Set forward to True for forward branches.
+        fill2 : list[str] or InstructionTest, optional
+            Filler instructions placed after the target instruction 
+            before the final load to out_addr. For branches, this should be an
+            InstructionTest object representing a test sequence for the not
+            taken branch. fill1 and fill2 should both have the same rd.
+            The branch offset is computed based on the sizes of fill1 and fill2.
+        forward : bool, optional
+            Forward branch. Place fill1 after fill2 in this case.
+            Default is False.
+        make_loop : bool, optional
+            If True, add an extra add instruction to fill1 to make a for loop.
+            If False, it is assumed fill1 includes all needed instructions.
+            The number of total loops should be `abs(v1-v2)` (at least 1).
+            It is assumed the branch condition is true for the initial values.
+            Default is False.
         """
 
         if v1 is None:
@@ -259,24 +305,43 @@ class InstructionTest(object):
             imm = v2
         elif inst_name in {*LOAD, *STORE}:
             imm = self.offset1
-        # TODO BRANCH, LUI_AUIPC, JUMP, MISC
+        elif inst_name in BRANCH:
+            imm = f"l{out_addr}"
+        if make_loop:
+            if inst_name == "bne":
+                rs = rs2 if unsigned(v1) > unsigned(v2) else rs1
+            elif inst_name in ("bge", "bgeu"):
+                rs = rs2
+            else: # blt, bltu
+                rs = rs1
+            fill1 += build_inst("addi", rs, rs, imm=1)
+        # TODO LUI_AUIPC, JUMP, MISC
         self.target_inst, do = build_inst(inst_name, rd, rs1, rs2, imm=imm, decode_outputs=True)
         self.imm = do[0]
         self.fill1 = fill1
         self.fill2 = fill2
+        self.forward = forward
+        self.extra = []
 
-    def test_sequence(self):
+    def test_sequence(self, store_out=True):
         """
         Create an instruction sequence to test this instruction.
 
+        Parameters
+        ----------
+        store_out : bool, optional
+            Include a final instruction to store rd to out_addr.
+            Default is True.
+
         Returns
         -------
-        instructions, expected: str, int
-            Sequence of instructions and expected output value.
+        instructions, expected : list[str], int
+            Sequence of instructions and expected output
         """
 
         inst_name, rd, rs1, rs2 = self.inst_name, self.rd, self.rs1, self.rs2
         v1, v2, imm = self.v1, self.v2, self.imm
+        fill1, fill2 = self.fill1, self.fill2
         if self.inst_name in {*LOAD, *STORE}:
             waddr = (v1 >> 2) << 2
             offset = v1 - waddr
@@ -297,10 +362,37 @@ class InstructionTest(object):
         elif inst_name in {*OP, *OP_IMM}:
             addi1 = build_inst("addi", rs1, rs1, imm=self.offset1)
             expected = signed(int(func[inst_name.replace('i', "")](v1, v2 if rs2 else imm)))
-        # TODO BRANCH, LUI_AUIPC, JUMP, MISC
-        instructions += [li32(rs2, v2), sw, self.lui1, self.fill1, addi1, self.target_inst, self.fill2, lw]
-        instructions.append(ls32("sw", rd, self.out_addr))
-        return "\n".join(instructions), signed(expected) if rd else 0
+        elif inst_name in BRANCH:
+            if rd is None:
+                rd = fill2.rd
+            fill1, expected1 = fill1.test_sequence(store_out=False)
+            fill2, expected2 = fill2.test_sequence(store_out=False)
+            fill1[0] = f".l{self.out_addr}: " + fill1[0]
+            if self.forward:
+                # place fill1 after fill2, where lw would normally go
+                fill1, lw = "", fill1
+                fill2 += build_inst("beq", 0, 0, 0, f"l{self.out_addr}_end")
+                expected = expected1 if func[inst_name](v1, v2) else expected2
+            else:
+                expected = expected2
+        # TODO LUI_AUIPC, JUMP, MISC
+        instructions += [li32(rs2, v2), sw, self.lui1, addi1, *fill1, self.target_inst, *fill2, lw]
+        instructions += self.extra
+        if store_out:
+            instructions.append(f".l{self.out_addr}_end: " + ls32("sw", rd, self.out_addr))
+        elif inst_name in BRANCH:
+            instructions.append(f".l{self.out_addr}_end: nop")
+        # omit "" from instructions
+        return [i for i in instructions if i], signed(expected) if rd else 0
+
+    def __iadd__(self, inst):
+        self.extra.append(inst)
+
+    def __iter__(self):
+        return iter(self.test_sequence(store_out=False)[0])
+
+    def __len__(self):
+        return len(self.test_sequence(store_out=False)[0])
 
 def assemble_riscv(asm_code: str, output_bin: str, march="rv32e", mabi="ilp32e"):
     """Compile RISC-V assembly string to a raw binary file."""
