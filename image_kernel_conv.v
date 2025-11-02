@@ -67,4 +67,10 @@ module conv33 #(
         end
     endfunction
 
+   // reset logic (clear all values if low)
+   if (!rst_n) begin
+      t0<=0;  t1<=0; m0<=0;  m1<=0; b0<=0; b1<=0:
+      pixel_out <= '0;
+   end
+
 endmodule
