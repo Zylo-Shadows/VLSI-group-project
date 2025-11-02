@@ -1,26 +1,33 @@
-module image_conv #(
+module conv33 #(
     parameter PIXEL_WIDTH = 8,          // bits per pixel
+    parameter ACC         = 16          // width of accumulator 
 )(
     input  wire                   clk,  // one tick  per pixel
     input  wire                   rst_n,
-    input  wire signed [PIXEL_WIDTH-1:0] pixel_in, // 8-bit pixel input (for single channel color)
+    \\ thre input pixels (per row)
+    input  wire signed [PIXEL_WIDTH-1:0] pix_top, // 8-bit pixel input (for single channel color)
+    input  wire signed [PIXEL_WIDTH-1:0] pix_mid, 
+    input  wire signed [PIXEL_WIDTH-1:0] pix_bot, 
+    
     input  wire [1:0]             mode,      // 0=sharpen, 1=gaussian blur, 2=edge
     output reg  signed [PIXEL_WIDTH-1:0] pixel_out
 );
 
-    // 3x3 window shift registers to intitialize the kernel array
-    //        | Column 0 |  Column 1 |  Column 2
-    // -----------------------------------------
-    // line 0 | top-left |  top-mid  |  top-right
-    // -----------------------------------------
-    // line 1 | mid-left |  mid-mid  |  top-right
-    // -----------------------------------------
-    // line 2 | bot-left |  bot-mid  |  bot-right
-    reg signed [PIXEL_WIDTH-1:0] line0[0:2];   
-    reg signed [PIXEL_WIDTH-1:0] line1[0:2];   
-    reg signed [PIXEL_WIDTH-1:0] line2[0:2];   
+    // 3x3 window to apply kernel to 
+    //  | Column 0 |  Column 1 |  Column 2
+    // -------------------------------------
+    //  |    t0    |     t1    |   pix_top
+    // -------------------------------------
+    //  |    m0    |     m1    |   pix_mid
+    // -------------------------------------
+    //  |    b0    |     b1    |   pix_bot
+    reg signed [PIXEL_WIDTH-1:0] t0, t1;     // row 0: col0, col1   
+    reg signed [PIXEL_WIDTH-1:0] m0, m1;     // row 1: col0, col1
+    reg signed [PIXEL_WIDTH-1:0] b0, b1;     // row 2: col0, col1
 
-    integer i;
+    // fill state: provides information about how many columns are present in the current window 
+    reg [1:0] fill_count;  // has up to 3 columns
+
 
     // Simple circular shifter per line (each clk)
     always @(posedge clk) begin
