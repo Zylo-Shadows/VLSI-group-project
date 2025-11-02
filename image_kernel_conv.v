@@ -2,14 +2,15 @@ module conv33 #(
     parameter PIXEL_WIDTH = 8,          // bits per pixel
     parameter ACCW        = 16          // width of accumulator 
 )(
-    input  wire                   clk,  // one tick  per pixel
-    input  wire                   rst_n,
+    input  wire                          clk,  // one tick  per pixel
+    input  wire                          rst_n,
+    input  wire                          shift_en, // for gating the shift
     // three input pixels (1 per row)
     input  wire signed [PIXEL_WIDTH-1:0] pix_top, // 8-bit pixel input (for single channel color)
     input  wire signed [PIXEL_WIDTH-1:0] pix_mid, 
     input  wire signed [PIXEL_WIDTH-1:0] pix_bot, 
     
-    input  wire [1:0]             mode,      // 0=sharpen, 1=gaussian blur, 2=edge detection
+    input  wire [1:0]                    mode,      // 0=sharpen, 1=gaussian blur, 2=edge detection
     
     output reg  signed [PIXEL_WIDTH-1:0] pixel_out
     
@@ -98,13 +99,10 @@ module conv33 #(
       if (!rst_n) begin
          t0<=0;  t1<=0; m0<=0;  m1<=0; b0<=0; b1<=0;
          pixel_out <= '0;
-      end 
-    end
-  
-    // shift input to registers
-    always @(posedge clk) begin
-      t0 <= t1;    t1 <= pix_top;
-      m0 <= m1;    m1 <= pix_mid;
-      b0 <= b1;    b1 <= pix_bot;
+      end else if (shift_en) begin
+         0 <= t1;    t1 <= pix_top;
+         m0 <= m1;    m1 <= pix_mid;
+         b0 <= b1;    b1 <= pix_bot;
+      end
     end
 endmodule
