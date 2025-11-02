@@ -4,7 +4,7 @@ module conv33 #(
 )(
     input  wire                   clk,  // one tick  per pixel
     input  wire                   rst_n,
-    \\ three input pixels (1 per row)
+    // three input pixels (1 per row)
     input  wire signed [PIXEL_WIDTH-1:0] pix_top, // 8-bit pixel input (for single channel color)
     input  wire signed [PIXEL_WIDTH-1:0] pix_mid, 
     input  wire signed [PIXEL_WIDTH-1:0] pix_bot, 
@@ -48,7 +48,7 @@ module conv33 #(
    wire signed [ACCW-1:0] conv_gaussian = gauss_sum >>> 4; // arithmetic right shift by 4: divide by 2^4
 
    // Edge detection: [-1 -1 -1; -1 8 -1; -1 -1 -1]
-   wire signed [ACCW-1:0]
+   wire signed [ACCW-1:0] conv_edge =
         8 * sx(m1)
       - ( sx(t0) + sx(t1) + sx(pix_top)
         + sx(m0)          + sx(pix_mid)
@@ -56,7 +56,7 @@ module conv33 #(
 
     // Function to clip result to 8-bit unsigned
     function signed [PIXEL_WIDTH-1:0] saturate_8bit;
-        input signed [15:0] val;
+        input signed [ACCW-1:0] val;
         begin
             if (val < 0)
                 saturate_8bit = 0;
@@ -74,7 +74,7 @@ module conv33 #(
          2'd0: selected_kernel = conv_sharpen;
          2'd1: selected_kernel = conv_gaussian;
          2'd2: selected_kernel = conv_edge;
-         default: selected_kernel = sx(mm); // pass-through logic
+         default: selected_kernel = sx(m1); // pass-through logic
       endcase
    end
 
@@ -82,16 +82,16 @@ module conv33 #(
    always @(posedge clk or negedge rst_n) begin
    // reset logic (clear all values if low)
       if (!rst_n) begin
-         t0<=0;  t1<=0; m0<=0;  m1<=0; b0<=0; b1<=0:
+         t0<=0;  t1<=0; m0<=0;  m1<=0; b0<=0; b1<=0;
          pixel_out <= '0;
       end else begin
          // Production of output ffor selected kernel
-         pixel_out <= saturate_8bit(selected_kernel)
+         pixel_out <= saturate_8bit(selected_kernel);
       end
    end
   
    // shift input to registers
-   always @(posedge clk)
+   always @(posedge clk) begin
       t0 <= t1;    t1 <= pix_top;
       m0 <= m1;    m1 <= pix_mid;
       b0 <= b1;    b1 <= pix_bot;
