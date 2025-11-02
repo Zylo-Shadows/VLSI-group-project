@@ -28,34 +28,45 @@ module conv33 #(
     reg signed [PIXEL_WIDTH-1:0] b0, b1;     // row 2: col0, col1
 
     // sign-extension into accumulator to hold large magnitude convolution sums  
-    function automatic signed [ACCW-1:0] sx;
+    function [ACCW-1:0] sx;
        input signed [PIXEL_WIDTH-1:0] v;
+       begin
        sx = $signed({{(ACCW-PIXEL_WIDTH){v[PIXEL_WIDTH-1]}}, v});
+       end
     endfunction
 
     // Writing the three convolution kernels
+    wire signed [ACCW-1:0] pass_through;
+    wire signed [ACCW-1:0] conv_sharpen;
+    wire signed [ACCW -1:0] gauss_sum;
+    wire signed [ACCW-1:0] conv_gaussian;
+    wire signed [ACCW-1:0] conv_edge;
+
+    // Pass-Through: [0 0 0; 0 1 0; 0 0 0]
+    assign pass_through =
+        sx(m1);
 
     // Sharpen: [ 0 -1 0; -1 5 -1; 0 -1 0 ]
-    wire signed [ACCW-1:0] conv_sharpen =
+    assign conv_sharpen =
         (5 * sx(m1)) - ( sx(t1) + sx(m0) + sx(pix_mid) + sx(b1) );
 
     // Gaussian: [1 2 1; 2 4 2; 1 2 1] * 1/16
-    wire signed [ACCW -1:0] gauss_sum =
+    assign gauss_sum =
         sx(t0) + (2*sx(t1)) + sx(pix_top)
       + (2*sx(m0)) + (4*sx(m1)) + (2*sx(pix_mid))
       + sx(b0) + (2*sx(b1)) + sx(pix_bot);
    
-    wire signed [ACCW-1:0] conv_gaussian = gauss_sum >>> 4; // arithmetic right shift by 4: divide by 2^4
+     assign conv_gaussian = gauss_sum >>> 4; // arithmetic right shift by 4: divide by 2^4
 
     // Edge detection: [-1 -1 -1; -1 8 -1; -1 -1 -1]
-    wire signed [ACCW-1:0] conv_edge =
+    assign conv_edge =
         8 * sx(m1)
       - ( sx(t0) + sx(t1) + sx(pix_top)
         + sx(m0)          + sx(pix_mid)
         + sx(b0) + sx(b1) + sx(pix_bot) );
 
     // Function to clip result to 8-bit unsigned
-    function signed [PIXEL_WIDTH-1:0] saturate_8bit;
+    function [PIXEL_WIDTH-1:0] saturate_8bit;
         input signed [ACCW-1:0] val;
         begin
             if (val < 0)
@@ -71,7 +82,7 @@ module conv33 #(
     reg signed [ACCW-1:0] selected_kernel;
     always @* begin
       case (mode)
-         2'd0: selected_kernel = sx(m1); // pass through logic
+         2'd0: selected_kernel = pass_through; 
          2'd1: selected_kernel = conv_sharpen;
          2'd2: selected_kernel = conv_gaussian;
          2'd3: selected_kernel = conv_edge;
@@ -79,15 +90,15 @@ module conv33 #(
     end
 
     // output logic
+    assign pixel_out = saturate_8bit(selected_kernel);
+
+    
     always @(posedge clk) begin
     // reset logic (clear all values if low)
       if (!rst_n) begin
          t0<=0;  t1<=0; m0<=0;  m1<=0; b0<=0; b1<=0;
          pixel_out <= '0;
-      end else begin
-         // Production of output ffor selected kernel
-         pixel_out <= saturate_8bit(selected_kernel);
-      end
+      end 
     end
   
     // shift input to registers
