@@ -39,16 +39,16 @@ module conv33 #(
     wire signed [ACCW-1:0] conv_sharpen =
         (5 * sx(m1)) - ( sx(t1) + sx(m0) + sx(pix_mid) + sx(b1) );
 
-   // Gaussian: [1 2 1; 2 4 2; 1 2 1] * 1/16
-   wire signed [ACCW -1:0] gauss_sum =
-        sx(t0) + ((2*sx(t1)) + sx(pix_top)
+    // Gaussian: [1 2 1; 2 4 2; 1 2 1] * 1/16
+    wire signed [ACCW -1:0] gauss_sum =
+        sx(t0) + (2*sx(t1)) + sx(pix_top)
       + (2*sx(m0)) + (4*sx(m1)) + (2*sx(pix_mid))
       + sx(b0) + (2*sx(b1)) + sx(pix_bot);
    
-   wire signed [ACCW-1:0] conv_gaussian = gauss_sum >>> 4; // arithmetic right shift by 4: divide by 2^4
+    wire signed [ACCW-1:0] conv_gaussian = gauss_sum >>> 4; // arithmetic right shift by 4: divide by 2^4
 
-   // Edge detection: [-1 -1 -1; -1 8 -1; -1 -1 -1]
-   wire signed [ACCW-1:0] conv_edge =
+    // Edge detection: [-1 -1 -1; -1 8 -1; -1 -1 -1]
+    wire signed [ACCW-1:0] conv_edge =
         8 * sx(m1)
       - ( sx(t0) + sx(t1) + sx(pix_top)
         + sx(m0)          + sx(pix_mid)
@@ -67,20 +67,20 @@ module conv33 #(
         end
     endfunction
 
-   // Mode selection mux
-   reg signed [ACCW-1:0] selected_kernel;
-   always @* begin
+    // Mode selection mux
+    reg signed [ACCW-1:0] selected_kernel;
+    always @* begin
       case (mode)
-         2'd0: selected_kernel = conv_sharpen;
-         2'd1: selected_kernel = conv_gaussian;
-         2'd2: selected_kernel = conv_edge;
-         default: selected_kernel = sx(m1); // pass-through logic
+         2'd0: selected_kernel = sx(m1); // pass through logic
+         2'd1: selected_kernel = conv_sharpen;
+         2'd2: selected_kernel = conv_gaussian;
+         2'd3: selected_kernel = conv_edge;
       endcase
-   end
+    end
 
-   // output logic
-   always @(posedge clk or negedge rst_n) begin
-   // reset logic (clear all values if low)
+    // output logic
+    always @(posedge clk) begin
+    // reset logic (clear all values if low)
       if (!rst_n) begin
          t0<=0;  t1<=0; m0<=0;  m1<=0; b0<=0; b1<=0;
          pixel_out <= '0;
@@ -88,12 +88,12 @@ module conv33 #(
          // Production of output ffor selected kernel
          pixel_out <= saturate_8bit(selected_kernel);
       end
-   end
+    end
   
-   // shift input to registers
-   always @(posedge clk) begin
+    // shift input to registers
+    always @(posedge clk) begin
       t0 <= t1;    t1 <= pix_top;
       m0 <= m1;    m1 <= pix_mid;
       b0 <= b1;    b1 <= pix_bot;
-   end
+    end
 endmodule
