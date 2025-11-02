@@ -1,0 +1,83 @@
+`timescale 1ns / 1ps
+
+module fifo_tb;
+
+    parameter DATA_WIDTH = 32;
+    parameter DEPTH      = 16;
+
+    reg     clk;
+    reg     rst;
+    reg  [DATA_WIDTH-1:0] din;
+    reg      wr_en;
+    reg     rd_en;
+    wire [DATA_WIDTH-1:0] dout;
+    wire     empty;
+    wire     full;
+    wire [$clog2(DEPTH):0] count;
+
+    fifo #(
+        .DATA_WIDTH(DATA_WIDTH),
+        .DEPTH(DEPTH)
+    ) uut (
+        .clk(clk),
+        .rst(rst),
+        .din(din),
+        .wr_en(wr_en),
+        .rd_en(rd_en),
+        .dout(dout),
+        .empty(empty),
+        .full(full),
+        .count(count)
+    );
+
+
+    initial clk = 0;
+    always #5 clk = ~clk; 
+    integer i;
+
+    initial begin
+    rst   = 0;
+    wr_en = 0;
+    rd_en = 0;
+    din   = 0;
+    #20;
+    rst = 1;
+       for (i = 0; i < DEPTH; i = i + 1) begin
+        @(posedge clk);
+        if (!full) begin
+        wr_en <= 1;
+          din <= i + 100;
+            end
+        end
+        @(posedge clk);
+        wr_en <= 0;
+        #30;
+        for (i = 0; i < DEPTH; i = i + 1) begin
+            @(posedge clk);
+            if (!empty) begin
+                rd_en <= 1;
+ 
+        end
+        end
+        @(posedge clk);
+        rd_en <= 0;
+
+
+        for (i = 0; i < DEPTH; i = i + 1) begin
+         @(posedge clk);
+         wr_en <= 1;
+         rd_en <= 1;
+         din   <= i + 200;
+        end
+        @(posedge clk);
+        wr_en <= 0;
+        rd_en <= 0;
+
+
+        #50;
+   
+        $stop;
+    end
+
+endmodule
+
