@@ -67,10 +67,25 @@ module conv33 #(
         end
     endfunction
 
-   // reset logic (clear all values if low)
-   if (!rst_n) begin
-      t0<=0;  t1<=0; m0<=0;  m1<=0; b0<=0; b1<=0:
-      pixel_out <= '0;
+   // Mode selection mux
+   reg signed [ACCW-1:0] selected_kernel;
+   always @* begin
+      case (mode)
+         2'd0: selected_kernel = conv_sharpen;
+         2'd1: selected_kernel = conv_gaussian;
+         2'd2: selected_kernel = conv_edge;
+         default: selected_kernel = sx(mm); // pass-through logic
+      endcase
    end
 
+   // reset logic (clear all values if low)
+   always @(posedge clk or negedgge rst_n) begin
+      if (!rst_n) begin
+         t0<=0;  t1<=0; m0<=0;  m1<=0; b0<=0; b1<=0:
+         pixel_out <= '0;
+      end
+   end
+
+   
+   
 endmodule
