@@ -78,14 +78,17 @@ module conv33 #(
       endcase
    end
 
+   // output logic
+   always @(posedge clk or negedge rst_n) begin
    // reset logic (clear all values if low)
-   always @(posedge clk or negedgge rst_n) begin
       if (!rst_n) begin
          t0<=0;  t1<=0; m0<=0;  m1<=0; b0<=0; b1<=0:
          pixel_out <= '0;
+      end else begin
+         // Production of output ffor selected kernel
+         pixel_out <= saturate_8bit(selected_kernel)
       end
    end
-
-   
+  
    
 endmodule
