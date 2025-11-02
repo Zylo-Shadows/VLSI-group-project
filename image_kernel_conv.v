@@ -90,5 +90,10 @@ module conv33 #(
       end
    end
   
-   
+   // shift input to registers
+   always @(posedge clk)
+      t0 <= t1;    t1 <= pix_top;
+      m0 <= m1;    m1 <= pix_mid;
+      b0 <= b1;    b1 <= pix_bot;
+   end
 endmodule
