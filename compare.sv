@@ -1,6 +1,6 @@
 import types::*;
 
-module cmpunit (
+module compare (
     input  logic [31:0] operand_a,
     input  logic [31:0] operand_b,
     input  cmp_op_t     cmp_op,
@@ -18,13 +18,13 @@ module cmpunit (
     // Comparison result logic
     always_comb begin
         case (cmp_op)
-            CMP_EQ:  result = eq;                    // Equal
-            CMP_NE:  result = ~eq;                   // Not Equal
-            CMP_LT:  result = lt_signed;             // Less Than (signed)
-            CMP_GE:  result = ~lt_signed;            // Greater or Equal (signed)
-            CMP_LTU: result = lt_unsigned;           // Less Than Unsigned
-            CMP_GEU: result = ~lt_unsigned;          // Greater or Equal Unsigned
-            default:  result = 1'b0;                 // Default case
+            CMP_EQ:  result = eq;                    
+            CMP_NE:  result = ~eq;                   
+            CMP_LT:  result = lt_signed;             
+            CMP_GE:  result = ~lt_signed;            
+            CMP_LTU: result = lt_unsigned;           
+            CMP_GEU: result = ~lt_unsigned;          
+            default:  result = 1'b0;                 
         endcase
     end
 

@@ -1,6 +1,9 @@
+// Import types package (assuming it contains cmp_op_t definition)
+import types::*;
+    
 `timescale 1ns / 1ps
 
-module tb_cmpunit;
+module compare_tb;
 
     // Parameters
     parameter CLK_PERIOD = 10; // 10ns clock period (100MHz)
@@ -18,8 +21,7 @@ module tb_cmpunit;
     int pass_count = 0;
     int fail_count = 0;
     
-    // Import types package (assuming it contains cmp_op_t definition)
-    import types::*;
+    
     
     // Instantiate the Unit Under Test (UUT)
     cmpunit uut (
