@@ -21,18 +21,21 @@ module ahb3lite_mem_subsystem #(
     input  [3:0] HPROT,
     input  [1:0] HTRANS,
     input  HREADY,
-    // should be interfacing  
+
     output reg HRESP,
     output reg HREADYOUT,
     output reg [HDATA_SIZE-1:0] HRDATA
 );
 
+    // --------------------------------------------------
     // Address decode
- 
+    // --------------------------------------------------
     wire sram_sel  = ((HADDR & SRAM_ADDR_MASK) == SRAM_ADDR_BASE);
     wire flash_sel = ((HADDR & FLASH_ADDR_MASK) == FLASH_ADDR_BASE);
 
+    // --------------------------------------------------
     // SRAM slave wires
+    // --------------------------------------------------
     wire [HDATA_SIZE-1:0] sram_rdata;
     wire sram_hready, sram_hresp;
 
@@ -40,11 +43,12 @@ module ahb3lite_mem_subsystem #(
     wire [HDATA_SIZE-1:0] flash_rdata;
     wire flash_hready, flash_hresp;
 
+    // --------------------------------------------------
     // SRAM instantiation
+    // --------------------------------------------------
     sram_ahb #(16, HDATA_SIZE) u_sram (
         .HCLK(HCLK),
         .HRESETn(HRESETn),
-		  // HReset low = high
         .HSEL(HSEL & sram_sel),
         .HWRITE(HWRITE),
         .HTRANS(HTRANS),
@@ -54,8 +58,10 @@ module ahb3lite_mem_subsystem #(
         .HREADYOUT(sram_hready),
         .HRESP(sram_hresp)
     );
+
+    // --------------------------------------------------
     // Flash instantiation
- 
+    // --------------------------------------------------
     flash_ahb #(20, HDATA_SIZE) u_flash (
         .HCLK(HCLK),
         .HRESETn(HRESETn),
@@ -70,27 +76,28 @@ module ahb3lite_mem_subsystem #(
     // --------------------------------------------------
     // Mux responses
     // --------------------------------------------------
-    always @(*) begin // chatgpt help me with logic here
+    always @(*) begin
         if (sram_sel) begin
-        HRDATA    = sram_rdata;
-        HREADYOUT = sram_hready;
-    HRESP     = sram_hresp;
+            HRDATA    = sram_rdata;
+            HREADYOUT = sram_hready;
+            HRESP     = sram_hresp;
         end else if (flash_sel) begin
             HRDATA    = flash_rdata;
-     HREADYOUT = flash_hready;
+            HREADYOUT = flash_hready;
             HRESP     = flash_hresp;
         end else begin
-           HRDATA    = 32'b0;   // safe default
-         HREADYOUT = 1'b1;
-          HRESP     = 1'b0;
+            HRDATA    = 32'b0;   // safe default
+            HREADYOUT = 1'b1;
+            HRESP     = 1'b0;
         end
     end
 
 endmodule
 
 
-// Simple SRAM AHB-Lite Slave for the 2nd inter
-
+// ===================================================
+// Simple SRAM AHB-Lite Slave (synthesizable)
+// ===================================================
 module sram_ahb #(parameter ADDR_WIDTH=16, DATA_WIDTH=32) (
     input HCLK,
     input HRESETn,
@@ -108,7 +115,7 @@ module sram_ahb #(parameter ADDR_WIDTH=16, DATA_WIDTH=32) (
     always @(posedge HCLK) begin
         if (!HRESETn) begin
             HRDATA    <= 0;
-             HREADYOUT <= 1;
+            HREADYOUT <= 1;
             HRESP     <= 0;
         end else if (HSEL && HTRANS[1]) begin
             HREADYOUT <= 1;
@@ -116,31 +123,27 @@ module sram_ahb #(parameter ADDR_WIDTH=16, DATA_WIDTH=32) (
             if (HWRITE)
                 mem[HADDR] <= HWDATA;
             else
-                  HRDATA <= mem[HADDR];
+                HRDATA <= mem[HADDR];
         end
     end
 endmodule
 
 
 // ===================================================
-// Flash ROM AHB-Lite Slave (Read-only) 
-// THis module reads to flash 
+// Flash ROM AHB-Lite Slave (Read-only)
 // ===================================================
 module flash_ahb #(parameter ADDR_WIDTH=20, DATA_WIDTH=32) (
     input HCLK,
     input HRESETn,
-    input HSEL,  // Slave select from AHB master
+    input HSEL,
     input [1:0] HTRANS,
     input [ADDR_WIDTH-1:0] HADDR,
     output reg [DATA_WIDTH-1:0] HRDATA,
     output reg HREADYOUT,
     output reg HRESP
 );
- // This simulates flash memory stuff
     reg [DATA_WIDTH-1:0] rom [0:(1<<ADDR_WIDTH)-1];
 
-	  // Load flash contents at
-    // flash.hex should contain program instructions/data
     initial $readmemh("flash.hex", rom);
 
     always @(posedge HCLK) begin
