@@ -1,5 +1,3 @@
-`include "definitions.vh"
-import types::*;
 
 module top (
     input  logic        HCLK,
@@ -7,69 +5,113 @@ module top (
     input  logic [31:0] boot_addr,
 
 //AHB-Lite instruction bus
-    output logic [31:0] HADDR_I,
-    output logic  [1:0] HTRANS_I,
-    output logic        HWRITE_I,
-    output logic  [2:0] HSIZE_I,
-    output logic [31:0] HWDATA_I,
-    input  logic [31:0] HRDATA_I,
-    input  logic        HREADY_I,
-    input  logic        HRESP_I,
-
-//AHB-Lite Data Bus
- output logic [31:0] HADDR_D,
-    output logic  [1:0] HTRANS_D,
-   output logic        HWRITE_D,
-   output logic  [2:0] HSIZE_D,
-    output logic [31:0] HWDATA_D,
-   input  logic [31:0] HRDATA_D,
-    input  logic        HREADY_D,
-   input  logic        HRESP_D
+    output logic [31:0] HADDR,
+    output logic  [1:0] HTRANS,
+    output logic        HWRITE,
+    output logic  [2:0] HSIZE,
+    output logic [31:0] HWDATA,
+    input  logic [31:0] HRDATA,
+    input  logic        HREADY,
+    input  logic [1:0]    HRESP
 );
-
-
-    // Internal CPU (Mem interface)
-
     logic [31:0] imem_addr;
     logic [31:0] imem_rdata;
+    logic     imem_req;    // core requests instruction fetch
+    logic     imem_ready;  // instruction available
 
     logic [31:0] dmem_addr;
     logic [31:0] dmem_wdata;
     logic [31:0] dmem_rdata;
-    logic dmem_write;
-    logic dmem_read;
-    logic  [1:0] dmem_size;
+    logic        dmem_read; // just our core Memory
+    logic       dmem_write;
+    logic  [1:0]dmem_size;
+    logic      dmem_ready;
 
-    // Instantiate the RV32E Core only 3 signals
     RV32E core (
         .clk(HCLK),
         .rst_n(HRESETn),
         .boot_addr(boot_addr)
+       
     );
 
+    // For now, instruction fetches is from external buss
+  
+    logic        ifetch_req;
+    logic [31:0] ifetch_addr;
+    logic [31:0] ifetch_rdata;
+    logic        ifetch_ready;
 
-    // Instruction F( Read only)
+    // External Bus
+    assign ifetch_req   = imem_req;
+    assign ifetch_addr  = imem_addr;
+    assign imem_rdata   = ifetch_rdata;
+    assign imem_ready   = ifetch_ready;
 
-    assign HADDR_I  = imem_addr;
-    assign HWRITE_I = 1'b0;
-    assign HSIZE_I  = 3'b010;      // word access
-    assign HTRANS_I = (HRESETn) ? 2'b10 : 2'b00; // NONSEQ when active
-    assign HWDATA_I = 32'b0; 
+    logic select_data; // 1 -> data master owns bus, 0 -> ifetch owns bus (when requested)
+    always_comb begin
+        if (dmem_read || dmem_write) select_data = 1;
+        else if (ifetch_req) select_data = 0;
+        else select_data = 1'bx; // no request idles
+    end
 
-    // Feed instruction data back
-    assign imem_rdata = HRDATA_I;
+    // Drive common bus signals from the selected master
+    
+   function logic [2:0] size_to_hsize(input logic [1:0] s);
+       case (s)
+         2'd0: size_to_hsize = 3'b000; // byte
+         2'd1: size_to_hsize = 3'b001; // halfword
+            default: size_to_hsize = 3'b010; // word
+        endcase
+    endfunction
 
+    // Default: idle
+    assign HTRANS = 2'b00;
+    assign HADDR  = 32'h0;
+    assign HWRITE = 1'b0;
+    assign HSIZE  = 3'b010;
+    assign HWDATA = 32'h0;
 
-    // Data Memory Access
+    //  when a master requests
+    always_comb begin
+      // default idle
+     // If data master requests -> route data master
+        if (dmem_read || dmem_write) begin
+           HTRANS = 2'b10; // NONSEQ
+           HADDR  = dmem_addr;
+         HWRITE = dmem_write;
+         HSIZE  = size_to_hsize(dmem_size);
+          HWDATA = dmem_wdata;
+        end
+        // Else if ifetch requests -> route ifetch
+        else if (ifetch_req) begin
+           HTRANS = 2'b10; // NONSEQ
+          HADDR  = ifetch_addr;
+          HWRITE = 1'b0;
+          HSIZE  = 3'b010; // word fetch
+          HWDATA = 32'h0;
+        end
+        // else keep idle
+    end
 
-    assign HADDR_D   = dmem_addr;
-    assign HWRITE_D  = dmem_write;
-    assign HSIZE_D   = {1'b0, dmem_size};  // convert 2-bit to 3-bit AHB size
-  // AHB transfer type:
-    //  (2’b10) when a read or write occurs, else IDLE (2’b00)   
-	assign HTRANS_D  = (dmem_read || dmem_write) ? 2'b10 : 2'b00;
-    assign HWDATA_D  = dmem_wdata;
+    always_comb begin
+        // default outputs
+        dmem_rdata   = 32'h0;
+        dmem_ready   = 1'b0;
+        ifetch_rdata = 32'h0;
+        ifetch_ready = 1'b0;
 
-    assign dmem_rdata = HRDATA_D;
+        if (HREADY) begin
+            // If data was sel and was requesting, return data to core
+            if (dmem_read || dmem_write) begin
+              dmem_rdata = HRDATA;
+              dmem_ready = 1'b1;
+            end
+            // else if ifetch was requesting, return that
+            else if (ifetch_req) begin
+               ifetch_rdata = HRDATA;
+              ifetch_ready = 1'b1;
+            end
+        end
+    end
 
 endmodule
