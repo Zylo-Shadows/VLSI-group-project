@@ -5,7 +5,7 @@ Operation is performed on the basis of alu_op value and output is 32-bit result.
 
 import types::*;
 
-module ALU_32(
+module alu(
   input [31:0] operand_a, operand_b,		//Registers to be operated on
   input [3:0] alu_op,				        //Control register to control which operation is done
   output reg [31:0] result			        //Result register 
