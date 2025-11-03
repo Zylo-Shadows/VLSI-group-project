@@ -24,7 +24,7 @@ module compare_tb;
     
     
     // Instantiate the Unit Under Test (UUT)
-    cmpunit uut (
+    compare uut (
         .operand_a(operand_a),
         .operand_b(operand_b),
         .cmp_op(cmp_op),
