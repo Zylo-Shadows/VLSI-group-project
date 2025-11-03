@@ -244,7 +244,7 @@ func = {
 
 class InstructionTest(object):
     def __init__(self, inst_name, rd, rs1, rs2, v1, v2, out_addr,
-                 fill1="", fill2="", forward=False, make_loop=False):
+                 fill1=[], fill2=[], forward=False, make_loop=False):
         """
         Create an object to help test the given instruciton.
 
