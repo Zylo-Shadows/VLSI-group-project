@@ -281,6 +281,11 @@ class InstructionTest(object):
             InstructionTest object representing a test sequence for the not
             taken branch. fill1 and fill2 should both have the same rd.
             The branch offset is computed based on the sizes of fill1 and fill2.
+            For jumps, fill2 is an InstructionTest representing a function body;
+            If its test sequence is already generated, then it should contain
+            a matching return jump; otherwise, one will be added. If fill2 is
+            a list, then it will be placed after the jump instruction and the
+            jump instruction will jump past it.
         forward : bool, optional
             Forward branch. Place fill1 after fill2 in this case.
             Default is False.
@@ -301,12 +306,24 @@ class InstructionTest(object):
         self.v1, self.v2 = v1, v2
         self.out_addr = out_addr
         self.lui1, self.offset1 = lui_offset(rs1, v1)
-        if inst_name in {*OP, *OP_IMM}:
-            imm = v2
-        elif inst_name in {*LOAD, *STORE}:
+        if inst_name in {*LOAD, *STORE}:
             imm = self.offset1
         elif inst_name in BRANCH:
-            imm = f"l{out_addr}"
+            imm = f"b{out_addr}"
+        elif inst_name in JUMP:
+            try:
+                jlabel = f"l{fill2.out_addr}"
+                fill2 += build_inst("jalr", rd=0, rs1=rd, imm=0)
+                fill2 = []
+            except AttributeError:
+                jlabel = f"l{self.out_addr}_end"
+            if inst_name == "jalr":
+                self.lui1 = build_inst("auipc", rs1, imm=f"%pcrel_hi(.{jlabel})")
+                imm = f"%pcrel_lo(.{jlabel})"
+            else:
+                imm = jlabel
+        else: # OP, OP_IMM, MISC
+            imm = v2
         if make_loop:
             if inst_name == "bne":
                 rs = rs2 if unsigned(v1) > unsigned(v2) else rs1
@@ -315,7 +332,6 @@ class InstructionTest(object):
             else: # blt, bltu
                 rs = rs1
             fill1 += build_inst("addi", rs, rs, imm=1)
-        # TODO LUI_AUIPC, JUMP, MISC
         self.target_inst, do = build_inst(inst_name, rd, rs1, rs2, imm=imm, decode_outputs=True)
         self.imm = do[0]
         self.fill1 = fill1
@@ -367,7 +383,7 @@ class InstructionTest(object):
                 rd = fill2.rd
             fill1, expected1 = fill1.test_sequence(store_out=False)
             fill2, expected2 = fill2.test_sequence(store_out=False)
-            fill1[0] = f".l{self.out_addr}: " + fill1[0]
+            fill1[0] = f".b{self.out_addr}: " + fill1[0]
             if self.forward:
                 # place fill1 after fill2, where lw would normally go
                 fill1, lw = "", fill1
@@ -375,13 +391,21 @@ class InstructionTest(object):
                 expected = expected1 if func[inst_name](v1, v2) else expected2
             else:
                 expected = expected2
-        # TODO LUI_AUIPC, JUMP, MISC
+        elif inst_name in JUMP:
+            self.target_inst = f".j{self.out_addr}: " + self.target_inst
+            rs = rs2 if rs2 else rs1
+            self.extra.append(f"la x{rs}, .j{self.out_addr}")
+            self.extra.append(build_inst("sub", rd=rd, rs1=rd, rs2=rs))
+            expected = 4
+        else: # MISC
+            expected = 0
         instructions += [li32(rs2, v2), sw, self.lui1, addi1, *fill1, self.target_inst, *fill2, lw]
         instructions += self.extra
         if store_out:
             instructions.append(f".l{self.out_addr}_end: " + ls32("sw", rd, self.out_addr))
         elif inst_name in BRANCH:
             instructions.append(f".l{self.out_addr}_end: nop")
+        instructions[0] = f".l{self.out_addr}" + instructions[0]
         # omit "" from instructions
         return [i for i in instructions if i], signed(expected) if rd else 0
 
