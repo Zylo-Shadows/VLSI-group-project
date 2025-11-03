@@ -12,7 +12,7 @@ module conv33 #(
     
     input  wire [1:0]                    mode,      // 0=pass, 1=sharpen, 2=gaussian blur, 3 = edge detect
     
-    output wire  signed [PIXEL_WIDTH-1:0] pixel_out
+    output wire [PIXEL_WIDTH-1:0]        pixel_out
     
 );
 
