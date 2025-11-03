@@ -10,7 +10,7 @@ module conv33 #(
     input  wire signed [PIXEL_WIDTH-1:0] pix_mid, 
     input  wire signed [PIXEL_WIDTH-1:0] pix_bot, 
     
-    input  wire [1:0]                    mode,      // 0=sharpen, 1=gaussian blur, 2=edge detection
+    input  wire [1:0]                    mode,      // 0=pass, 1=sharpen, 2=gaussian blur, 3 = edge detect
     
     output wire  signed [PIXEL_WIDTH-1:0] pixel_out
     
