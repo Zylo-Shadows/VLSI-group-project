@@ -28,8 +28,8 @@ module top (
 );
 
 
-    // Internal CPU (Mem interface)
-
+    // Internal CPU → Memory Interface
+    // ===============================
     logic [31:0] imem_addr;
     logic [31:0] imem_rdata;
 
@@ -48,11 +48,11 @@ module top (
     );
 
 
-    // Instruction F( Read only)
+    // Instruction Fetch (Read-only)
 
     assign HADDR_I  = imem_addr;
     assign HWRITE_I = 1'b0;
-    assign HSIZE_I  = 3'b010;      // word access
+    assign HSIZE_I  = 3'b010;         // word access
     assign HTRANS_I = (HRESETn) ? 2'b10 : 2'b00; // NONSEQ when active
     assign HWDATA_I = 32'b0; 
 
