@@ -23,12 +23,12 @@ package types;
     } opcode_t;
 
     typedef enum logic [2:0] {
-        CMP_BEQ   = 3'b000,
-        CMP_BNE   = 3'b001,
-        CMP_BLT   = 3'b100,
-        CMP_BGE   = 3'b101,
-        CMP_BLTU  = 3'b110,
-        CMP_BGEU  = 3'b111
+        CMP_EQ   = 3'b000,
+        CMP_NE   = 3'b001,
+        CMP_LT   = 3'b100,
+        CMP_GE   = 3'b101,
+        CMP_LTU  = 3'b110,
+        CMP_GEU  = 3'b111
     } cmp_op_t;
 
     // {funct7[5], funct3}
