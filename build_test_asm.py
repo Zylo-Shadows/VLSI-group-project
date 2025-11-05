@@ -275,7 +275,7 @@ class InstructionTest(object):
             Address to store the final result.
         fill1 : list[str] or InstructionTest, optional
             Filler instructions placed after rs1 is loaded before the
-            target instruction. fill2 is  For branches, this should be an
+            target instruction. For branches, this should be an
             InstructionTest object representing a test sequence for the taken
             branch. Set forward to True for forward branches.
         fill2 : list[str] or InstructionTest, optional
@@ -316,16 +316,14 @@ class InstructionTest(object):
         elif inst_name in JUMP:
             try:
                 jlabel = f"l{fill2.out_addr}"
-                fill2 += build_inst("jalr", rd=0, rs1=rd, imm=0)
+                fill2 += "ret"
                 fill2 = []
             except AttributeError:
                 jlabel = f"l{self.out_addr}_end"
-            if inst_name == "jalr":
-                self.lui1 = build_inst("auipc", rs1, imm=f"%pcrel_hi(.{jlabel})")
-                fill1 = []
-                imm = f"%pcrel_lo(.{jlabel})"
-            else:
-                imm = jlabel
+            # To avoid "dangerous relocation" and "relocation truncated to fit",
+            # use call pseudo-op and let GCC generate jal or auipc + jalr
+            self.target_inst = f"call .{jlabel}"
+            self.imm = jlabel
         else: # OP, OP_IMM, MISC
             imm = v2
         if make_loop:
@@ -336,9 +334,10 @@ class InstructionTest(object):
             else: # blt, bltu
                 rs = rs1
             fill1 += build_inst("addi", rs, rs, imm=1)
-        self.target_inst, do = build_inst(inst_name, rd, rs1, rs2, imm=imm, decode_outputs=True)
-        self.decode_outputs = do
-        self.imm = do[0]
+        if not getattr(self, "target_inst", False):
+            self.target_inst, do = build_inst(inst_name, rd, rs1, rs2, imm=imm, decode_outputs=True)
+            self.decode_outputs = do
+            self.imm = do[0]
         self.fill1 = fill1
         self.fill2 = fill2
         self.forward = forward
@@ -401,11 +400,14 @@ class InstructionTest(object):
             else:
                 expected = expected2
         elif inst_name in JUMP:
-            self.target_inst = f".j{self.out_addr}: " + self.target_inst
             rs = rs2 if rs2 else rs1
             self.extra.append(f"la x{rs}, .j{self.out_addr}")
             self.extra.append(build_inst("sub", rd=rd, rs1=rd, rs2=rs))
-            expected = 4
+            if fill2:
+                fill2[0] = f".j{self.out_addr}: " + fill2[0]
+            else:
+                self.extra[0] = f".j{self.out_addr}: " + self.extra[0]
+            expected = 0
         else: # MISC
             expected = 0
         instructions += [*li32(rs2, v2), *sw, self.lui1, addi1, *fill1, self.target_inst, *fill2, *lw]
@@ -569,15 +571,21 @@ def main(bin_file, instructions):
     for inst_name in JUMP:
         for rs1, rs2 in itertools.product(set(regs2test + bregs)-{0}, repeat=2):
             fill1 = random.choice(fillers)
-            fill2 = random.choice(fillers)
-            tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=ra, v1=None, v2=None, out_addr=4*(len(tests)+1),
-                                         fill1=fill1, fill2=fill2))
+            idx2 = random.randrange(len(fillers))
+            fill2 = fillers[idx2]
+            test = InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=ra, v1=None, v2=None, out_addr=4*(len(tests)+1),
+                                   fill1=fill1, fill2=fill2)
+            if inst_name == "jal":
+                # place close to function body, so call generates JAL
+                idx = max(0, 2*idx2 + random.randrange(-2**12, 2**12))
+                tests.insert(idx, test)
+            else:
+                tests.insert(random.randrange(len(tests)), test)
             tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=ra, v1=None, v2=None, out_addr=4*(len(tests)+1),
                                          fill1=fill1, fill2=list(fill2)))
 
     sequenced = set()
 
-    # TODO place so that JAL doesn't cause "relocation truncated to fit"
     for test in tests:
         if test.out_addr not in sequenced:
             test_sequence, output = test.test_sequence()
