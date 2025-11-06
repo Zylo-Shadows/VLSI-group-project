@@ -1,0 +1,90 @@
+# Universal Junk
+
+## MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+*.alias
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+## General Junk
+*~
+*.swp
+*.swo
+*.bak
+*.tmp
+*.log
+_autosave-*
+*-backups/
+*.FCBak
+*.tmp
+.vscode
+.VSCodeCounter/
+.~lock.*
+*.drawio.bkp
+build/
+tmp/
+temp/
+logs/
+__pycache__/
+
+# Quartus Junk
+db/
+incremental_db/
+output_files/
+simulation/
+tmp-clearbox/
+qdb/
+greybox_tmp/
+*.rpt
+*.qdf
+*.qpf
+*.qsf
+*.qws
+*.summary
+*.smsg
+*.sof
+*.pof
+*.jic
+*.srf
+*.qmsg
+*.map
+*.sta
+*.vho
+*.vcd
+*.vco
+*.vcdx
+*.qarlog
+*.cdf
+
+## ModelSim / QuestaSim Junk
+work/
+transcript
+vsim.wlf
+modelsim.ini
+vsim.dbg
+*.vstf
+*.do
+
+# LaTeX
+*.aux
+*.bbl
+*.blg
+*.out
+*.toc
+*.lof
+*.lot
+*.log
+*.dvi
+*.synctex.gz
