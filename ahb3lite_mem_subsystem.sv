@@ -50,7 +50,7 @@ module ahb3lite_mem_subsystem #(
     // Address decode
     wire sram_sel  = ((HADDR & SRAM_ADDR_MASK) == SRAM_ADDR_BASE);
     wire flash_sel = ((HADDR & FLASH_ADDR_MASK) == FLASH_ADDR_BASE);
-
+//
     // Drive slave select out
     assign sram_hsel   = sram_sel;
     assign flash_hsel  = flash_sel;
