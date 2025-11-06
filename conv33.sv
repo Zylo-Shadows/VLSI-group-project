@@ -2,17 +2,17 @@ module conv33 #(
     parameter PIXEL_WIDTH = 8,          // bits per pixel
     parameter ACCW        = 16          // width of accumulator 
 )(
-    input  wire                          clk,  // one tick  per pixel
-    input  wire                          rst_n,
-    input  wire                          shift_en, // for gating the shift
+    input  logic             clk,  // one tick  per pixel
+    input  logic             rst_n,
+    input  logic             shift_en, // for gating the shift
     // three input pixels (1 per row)
-    input  wire signed [PIXEL_WIDTH-1:0] pix_top, // 8-bit pixel input (for single channel color)
-    input  wire signed [PIXEL_WIDTH-1:0] pix_mid, 
-    input  wire signed [PIXEL_WIDTH-1:0] pix_bot, 
+    input  logic signed [PIXEL_WIDTH-1:0] pix_top, // 8-bit pixel input (for single channel color)
+    input  logic signed [PIXEL_WIDTH-1:0] pix_mid, 
+    input  logic signed [PIXEL_WIDTH-1:0] pix_bot, 
     
-    input  wire [1:0]                    mode,      // 0=pass, 1=sharpen, 2=gaussian blur, 3 = edge detect
+    input  logic [1:0]             mode,   // 0=pass, 1=sharpen, 2=gaussian blur, 3 = edge detect
     
-    output wire [PIXEL_WIDTH-1:0]        pixel_out
+    output logic [PIXEL_WIDTH-1:0] pixel_out
     
 );
 
@@ -24,12 +24,12 @@ module conv33 #(
     //  |    m0    |     m1    |   pix_mid
     // -------------------------------------
     //  |    b0    |     b1    |   pix_bot
-    reg signed [PIXEL_WIDTH-1:0] t0, t1;     // row 0: col0, col1   
-    reg signed [PIXEL_WIDTH-1:0] m0, m1;     // row 1: col0, col1
-    reg signed [PIXEL_WIDTH-1:0] b0, b1;     // row 2: col0, col1
+    logic signed [PIXEL_WIDTH-1:0] t0, t1; // row 0: col0, col1   
+    logic signed [PIXEL_WIDTH-1:0] m0, m1; // row 1: col0, col1
+    logic signed [PIXEL_WIDTH-1:0] b0, b1; // row 2: col0, col1
 
     // sign-extension into accumulator to hold large magnitude convolution sums  
-    function [ACCW-1:0] sx;
+    function automatic logic signed[ACCW-1:0] sx;
        input signed [PIXEL_WIDTH-1:0] v;
        begin
        sx = $signed({{(ACCW-PIXEL_WIDTH){v[PIXEL_WIDTH-1]}}, v});
@@ -37,11 +37,11 @@ module conv33 #(
     endfunction
 
     // Writing the three convolution kernels
-    wire signed [ACCW-1:0] pass_through;
-    wire signed [ACCW-1:0] conv_sharpen;
-    wire signed [ACCW -1:0] gauss_sum;
-    wire signed [ACCW-1:0] conv_gaussian;
-    wire signed [ACCW-1:0] conv_edge;
+    logic signed [ACCW-1:0] pass_through;
+    logic signed [ACCW-1:0] conv_sharpen;
+    logic signed [ACCW -1:0] gauss_sum;
+    logic signed [ACCW-1:0] conv_gaussian;
+    logic signed [ACCW-1:0] conv_edge;
 
     // Pass-Through: [0 0 0; 0 1 0; 0 0 0]
     assign pass_through =
@@ -67,7 +67,7 @@ module conv33 #(
         + sx(b0) + sx(b1) + sx(pix_bot) );
 
     // Function to clip result to 8-bit unsigned
-    function [PIXEL_WIDTH-1:0] saturate_8bit;
+       function automatic logic[PIXEL_WIDTH-1:0] saturate_8bit;
         input signed [ACCW-1:0] val;
         begin
             if (val < 0)
@@ -80,9 +80,9 @@ module conv33 #(
     endfunction
 
     // Mode selection mux
-    reg signed [ACCW-1:0] selected_kernel;
-    always @* begin
-      case (mode)
+    logic signed [ACCW-1:0] selected_kernel;
+    always_comb begin
+      unique case (mode)
          2'd0: selected_kernel = pass_through; 
          2'd1: selected_kernel = conv_sharpen;
          2'd2: selected_kernel = conv_gaussian;
@@ -94,11 +94,12 @@ module conv33 #(
     assign pixel_out = saturate_8bit(selected_kernel);
 
     
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
     // reset logic (clear all values if low)
       if (!rst_n) begin
          t0<=0;  t1<=0; m0<=0;  m1<=0; b0<=0; b1<=0;
       end else if (shift_en) begin
+    // shift to next window on every clock
          t0 <= t1;    t1 <= pix_top;
          m0 <= m1;    m1 <= pix_mid;
          b0 <= b1;    b1 <= pix_bot;
