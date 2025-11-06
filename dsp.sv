@@ -1,6 +1,6 @@
 // split 3x32b inputs into RGB channels, run per-channel conv33, repack to 32b
 
-module conv33_wrap #(
+module dsp #(
   parameter int PIXEL_WIDTH = 8,
   parameter int ACCW        = 16,
   // byte indices: 0=[7:0], 1=[15:8], 2=[23:16], 3=[31:24]
