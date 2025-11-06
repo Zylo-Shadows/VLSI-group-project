@@ -3,7 +3,7 @@ import types::*;
     
 `timescale 1ns / 1ps
 
-module compare_tb;
+module tb_compare;
 
     // Parameters
     parameter CLK_PERIOD = 10; // 10ns clock period (100MHz)
