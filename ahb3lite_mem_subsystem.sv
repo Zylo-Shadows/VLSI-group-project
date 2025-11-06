@@ -83,5 +83,4 @@ module ahb3lite_mem_subsystem #(
             HRESP     = 1'b0;  // OKAY response
         end
     end
-
 endmodule
