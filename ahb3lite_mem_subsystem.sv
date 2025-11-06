@@ -11,142 +11,77 @@ module ahb3lite_mem_subsystem #(
     input  HCLK,
     input  HRESETn,
 
-    // AHB-Lite master interface
+    // Master Side
     input  HSEL,
-    input  [HADDR_SIZE-1:0] HADDR,
-    input  [HDATA_SIZE-1:0] HWDATA,
+    input [HADDR_SIZE-1:0] HADDR,
+    input [HDATA_SIZE-1:0] HWDATA,
     input  HWRITE,
     input  [2:0] HSIZE,
     input  [2:0] HBURST,
-    input  [3:0] HPROT,
-    input  [1:0] HTRANS,
-    input  HREADY,
-    // should be interfacing  
+    input [3:0] HPROT,
+    input [1:0] HTRANS,
+
     output reg HRESP,
     output reg HREADYOUT,
-    output reg [HDATA_SIZE-1:0] HRDATA
+    output reg [HDATA_SIZE-1:0] HRDATA,
+
+    // Ext SRAM Interface
+    output       sram_hsel,
+    output [15:0] sram_haddr,
+    output       sram_hwrite,
+    output [1:0] sram_htrans,
+    output [HDATA_SIZE-1:0] sram_hwdata,
+    input  [HDATA_SIZE-1:0] sram_hrdata,
+    input        sram_hready,
+    input        sram_hresp,
+
+    // Ext Flassh
+    output       flash_hsel,
+    output [19:0] flash_haddr,
+    output       flash_hwrite,
+    output [1:0] flash_htrans,
+    output [HDATA_SIZE-1:0] flash_hwdata,
+    input  [HDATA_SIZE-1:0] flash_hrdata,
+    input        flash_hready,
+    input        flash_hresp
 );
 
+
     // Address decode
- 
     wire sram_sel  = ((HADDR & SRAM_ADDR_MASK) == SRAM_ADDR_BASE);
     wire flash_sel = ((HADDR & FLASH_ADDR_MASK) == FLASH_ADDR_BASE);
 
-    // SRAM slave wires
-    wire [HDATA_SIZE-1:0] sram_rdata;
-    wire sram_hready, sram_hresp;
+    // Drive slave select out
+    assign sram_hsel   = sram_sel;
+    assign flash_hsel  = flash_sel;
 
-    // Flash slave wires
-    wire [HDATA_SIZE-1:0] flash_rdata;
-    wire flash_hready, flash_hresp;
-
-    // SRAM instantiation
-    sram_ahb #(16, HDATA_SIZE) u_sram (
-        .HCLK(HCLK),
-        .HRESETn(HRESETn),
-		  // HReset low = high
-        .HSEL(HSEL & sram_sel),
-        .HWRITE(HWRITE),
-        .HTRANS(HTRANS),
-        .HADDR(HADDR[15:0]),
-        .HWDATA(HWDATA),
-        .HRDATA(sram_rdata),
-        .HREADYOUT(sram_hready),
-        .HRESP(sram_hresp)
-    );
-    // Flash instantiation
- 
-    flash_ahb #(20, HDATA_SIZE) u_flash (
-        .HCLK(HCLK),
-        .HRESETn(HRESETn),
-        .HSEL(HSEL & flash_sel),
-        .HTRANS(HTRANS),
-        .HADDR(HADDR[19:0]),
-        .HRDATA(flash_rdata),
-        .HREADYOUT(flash_hready),
-        .HRESP(flash_hresp)
-    );
-
-    // --------------------------------------------------
-    // Mux responses
-    // --------------------------------------------------
-    always @(*) begin // chatgpt help me with logic here
+  // Forward control/address/data to slaves (usually forwarded to all slaves;
+   // inactive slaves will be ignored
+    assign sram_haddr  = HADDR[15:0];
+    assign flash_haddr = HADDR[19:0];
+    assign sram_hwrite  = HWRITE;
+    assign flash_hwrite = HWRITE;
+    assign sram_htrans  = HTRANS;
+    assign flash_htrans = HTRANS;
+    assign sram_hwdata  = HWDATA;
+    assign flash_hwdata = HWDATA;
+//send all to data
+  // Mux slave responses back to the master (combinational)
+    always @(*) begin
         if (sram_sel) begin
-        HRDATA    = sram_rdata;
-        HREADYOUT = sram_hready;
-    HRESP     = sram_hresp;
+         HRDATA    = sram_hrdata;
+         HREADYOUT = sram_hready;
+         HRESP     = sram_hresp;
         end else if (flash_sel) begin
-            HRDATA    = flash_rdata;
-     HREADYOUT = flash_hready;
+            HRDATA    = flash_hrdata;
+            HREADYOUT = flash_hready;
             HRESP     = flash_hresp;
         end else begin
-           HRDATA    = 32'b0;   // safe default
-         HREADYOUT = 1'b1;
-          HRESP     = 1'b0;
+           // Default safe values for unmapped access:
+            HRDATA    = {HDATA_SIZE{1'b0}};
+            HREADYOUT = 1'b1;  // immediately ready (or could be forced error)
+            HRESP     = 1'b0;  // OKAY response
         end
     end
 
-endmodule
-
-
-// Simple SRAM AHB-Lite Slave for the 2nd inter
-
-module sram_ahb #(parameter ADDR_WIDTH=16, DATA_WIDTH=32) (
-    input HCLK,
-    input HRESETn,
-    input HSEL,
-    input HWRITE,
-    input [1:0] HTRANS,
-    input [ADDR_WIDTH-1:0] HADDR,
-    input [DATA_WIDTH-1:0] HWDATA,
-    output reg [DATA_WIDTH-1:0] HRDATA,
-    output reg HREADYOUT,
-    output reg HRESP
-);
-    reg [DATA_WIDTH-1:0] mem [0:(1<<ADDR_WIDTH)-1];
-
-    always @(posedge HCLK) begin
-        if (!HRESETn) begin
-            HRDATA    <= 0;
-             HREADYOUT <= 1;
-            HRESP     <= 0;
-        end else if (HSEL && HTRANS[1]) begin
-            HREADYOUT <= 1;
-            HRESP     <= 0;
-            if (HWRITE)
-                mem[HADDR] <= HWDATA;
-            else
-                  HRDATA <= mem[HADDR];
-        end
-    end
-endmodule
-
-
-// ===================================================
-// Flash ROM AHB-Lite Slave (Read-only) 
-// THis module reads to flash 
-// ===================================================
-module flash_ahb #(parameter ADDR_WIDTH=20, DATA_WIDTH=32) (
-    input HCLK,
-    input HRESETn,
-    input HSEL,  // Slave select from AHB master
-    input [1:0] HTRANS,
-    input [ADDR_WIDTH-1:0] HADDR,
-    output reg [DATA_WIDTH-1:0] HRDATA,
-    output reg HREADYOUT,
-    output reg HRESP
-);
- // This simulates flash memory stuff
-    reg [DATA_WIDTH-1:0] rom [0:(1<<ADDR_WIDTH)-1];
-
-	  // Load flash contents at
-    // flash.hex should contain program instructions/data
-    initial $readmemh("flash.hex", rom);
-
-    always @(posedge HCLK) begin
-        HREADYOUT <= 1;
-        HRESP     <= 0;
-        if (HSEL && HTRANS[1])
-            HRDATA <= rom[HADDR];
-    end
 endmodule
