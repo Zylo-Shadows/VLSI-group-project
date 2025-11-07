@@ -4,7 +4,17 @@ import types::*;
 module RV32E (
     input logic clk,
     input logic rst_n,
-    input logic [31:0] boot_addr
+    input logic [31:0] boot_addr,
+
+    output logic [31:0] inst_addr,
+    input  logic [31:0] instruction,
+    input  logic inst_ready,
+
+    output logic sram_cen, sram_wen,
+    output logic [ 3:0] sram_ben,
+    output logic [31:0] sram_addr,
+    output logic [31:0] sram_din,
+    input  logic [31:0] sram_dout
 );
 
     // Pipeline stage signals
@@ -79,7 +89,7 @@ module RV32E (
             mem_write_ex   <= 1'b0;
             mem_size_ex    <= 2'b0;
             mem_unsigned_ex<= 1'b0;
-            alu_op_ex      <= 4'b0;
+            alu_op_ex      <= alu_op_t'(4'b0);
             alu_src_a_ex   <= 2'b0;
             alu_src_b_ex   <= 2'b0;
             alu_imm_ex     <= 1'b0;
@@ -152,13 +162,15 @@ module RV32E (
     assign pc_load_id = jump_id || (branch_id && branch_taken);
 
     always @(posedge clk) begin
-        if (pc_load_id || pc_load_ex || !rst_n) instruction_id <= NOP;
+        if (!inst_ready || pc_load_id || pc_load_ex || !rst_n)
+            instruction_id <= NOP;
         else instruction_id <= instruction_if;
     end
 
     pc_reg pc (
         .clk(clk),
         .rst_n(rst_n),
+        .pc_en(inst_ready),
         .pc_start(boot_addr),
         .pc_load(pc_load_ex), 
         .pc_in(pc_target),
@@ -167,13 +179,8 @@ module RV32E (
         .pc_next(pc_next)
     );
 
-    instruction_memory imem (
-        .clk(clk),
-        .rst_n(rst_n),
-        .boot_addr(boot_addr),
-        .addr(pc_next),
-        .instruction(instruction_if)
-    );
+    assign inst_addr = pc_next;
+    assign instruction_if = instruction;
 
     register_file regfile (
         .clk(clk),
@@ -256,16 +263,19 @@ module RV32E (
 
     // TODO DSP module instantiation
 
-    data_memory dmem (
-        .clk(clk),
-        .rst_n(rst_n),
-        .addr(alu_result_ex),
-        .write_data(rs2_data_ex),
-        .mem_write(mem_write_ex),
-        .mem_size(mem_size_ex),
-        .mem_unsigned(mem_unsigned_ex),
-        .read_data(mem_data)
-    );
+    assign sram_cen  = !rst_n;
+    assign sram_addr = alu_result_ex;
+    assign sram_din  = rs2_data_ex;
+    assign sram_wen  = !mem_write_ex;
+    assign sram_ben  = {{2{mem_size_ex > 1}}, mem_size_ex > 0, 1'b1};
+
+    always_comb begin
+        mem_data = sram_dout;
+        if (!sram_ben[1])
+            mem_data[15:8] = (mem_unsigned_ex ? 8'd0 : {8{sram_dout[7]}});
+        if (!sram_ben[2])
+            mem_data[31:16] = {2{(mem_unsigned_ex ? 8'd0 : {8{sram_dout[7]}})}};
+    end
 
     always_comb begin
         // SLT
