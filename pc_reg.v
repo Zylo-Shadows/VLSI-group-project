@@ -1,6 +1,7 @@
 module pc_reg (
     input  wire        clk,
-    input  wire        rst,  // synchronous rset
+    input  wire        rst_n,  // synchronous reset
+    input  wire        pc_en,
     input  wire [31:0] pc_start,
     input  wire        pc_load,
     input  wire [31:0] pc_in,
@@ -10,15 +11,21 @@ module pc_reg (
 );
 
     always @(posedge clk) begin
-        if (rst) //  rset
+        if (!rst_n)
             pc_out <= pc_start;
-        else if (pc_load)
-            pc_out <= pc_in;
         else
-            pc_out <= pc_out + 32'd4;
+            pc_out <= pc_next;
     end
- // logic 
+
     assign pc_plus_4 = pc_out + 32'd4;
-    assign pc_next   = pc_load ? pc_in : pc_plus_4;
+
+    always @(*) begin
+        if (!pc_en)
+            pc_next = pc_out;
+        else if (pc_load)
+            pc_next = pc_in;
+        else
+            pc_next = pc_plus_4;
+    end
 
 endmodule
