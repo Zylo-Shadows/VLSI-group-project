@@ -28,7 +28,7 @@ module dsp #(
   endfunction
 
   // keep alpha from mid_pix unchanged since we aren't performing convolution on the alpha channel
-  wire [7:0] A_passthru = byte_at(mid_pix, A_IDX);
+  wire [7:0] A_const = 8h'FF
 
   // R channel
   wire [PIXEL_WIDTH-1:0] R_out;
@@ -67,6 +67,6 @@ module dsp #(
   assign pixel_out[7:0]   = R_out;
   assign pixel_out[15:8]  = G_out;
   assign pixel_out[23:16] = B_out;
-  assign pixel_out[31:24] = A_passthru;
+  assign pixel_out[31:24] = A_const;
 
 endmodule
