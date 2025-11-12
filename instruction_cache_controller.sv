@@ -1,6 +1,6 @@
 module instruction_cache_controller #(
     parameter CACHE_SIZE = 1024,
-    parameter BLOCK_SIZE = 16,
+    parameter BLOCK_SIZE = 64,
     parameter PREFETCH   = 8
 )(
     // AHB-Lite Clock and Reset
@@ -16,18 +16,15 @@ module instruction_cache_controller #(
     input  logic        HREADY,
     // HRESP is currently unused, as many fetch errors would be fatal anyway
     input  logic        HRESP,
-    
+
     // CPU Interface
     input  logic [31:0] cpu_addr,
-    input  logic        cpu_req,
     output logic [31:0] cpu_data,
     output logic        cpu_ready,
 
     // Cache Control
     input  logic        cache_enable,
-    input  logic        cache_flush,
-    output logic        cache_hit,
-    output logic        cache_miss
+    output logic        cache_hit
 );
 
     localparam NUM_BLOCKS = CACHE_SIZE / BLOCK_SIZE;
@@ -53,16 +50,14 @@ module instruction_cache_controller #(
     logic            [TAG_BITS-1:0] req_tag;
     logic          [INDEX_BITS-1:0] req_index;
     logic [BLOCK_OFFSET_BITS-1-2:0] req_word;
-    logic                     [1:0] req_off;
 
-    assign {req_tag, req_index, req_word, req_off} = cpu_addr;
+    assign {req_tag, req_index, req_word} = cpu_addr[31:2];
 
     logic            [TAG_BITS-1:0] fetch_tag;
     logic          [INDEX_BITS-1:0] fetch_index;
     logic [BLOCK_OFFSET_BITS-1-2:0] fetch_word;
-    logic                     [1:0] fetch_off;
 
-    assign {fetch_tag, fetch_index, fetch_word, fetch_off} = fetch_addr;
+    assign {fetch_tag, fetch_index, fetch_word} = fetch_addr[31:2];
 
     // Cache Lookup
     logic tag_match;
