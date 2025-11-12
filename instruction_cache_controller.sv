@@ -1,6 +1,6 @@
 module instruction_cache_controller #(
     parameter CACHE_SIZE = 1024,
-    parameter BLOCK_SIZE = 4
+    parameter BLOCK_SIZE = 16
 )(
     // AHB-Lite Clock and Reset
     input  logic        HCLK,
@@ -50,17 +50,18 @@ module instruction_cache_controller #(
     cache_state_t current_state, next_state;
 
     // Cache Memory Arrays
-    logic [TAG_BITS-1:0]    tag_array [NUM_BLOCKS-1:0];
-    logic [31:0]           data_array [NUM_BLOCKS-1:0];  // 4 bytes per block
-    logic                   valid_array [NUM_BLOCKS-1:0];
+    logic           [TAG_BITS-1:0] tag_array   [NUM_BLOCKS-1:0];
+    logic [BLOCK_SIZE/4-1:0][31:0] data_array  [NUM_BLOCKS-1:0];
+    logic                          valid_array [NUM_BLOCKS-1:0];
 
     // Address Parsing
     logic [TAG_BITS-1:0]    req_tag;
     logic [INDEX_BITS-1:0]  req_index;
+    logic [BLOCK_OFFSET_BITS-1:0] req_offset;
+    logic [1:0]             word_select;
 
-    //Extract tag and index from word-aligned address
-    assign req_tag = cpu_addr[31:INDEX_BITS+2];
-    assign req_index = cpu_addr[INDEX_BITS+1:2];
+    assign {req_tag, req_index, req_offset} = cpu_addr;
+    assign word_select = req_offset[BLOCK_OFFSET_BITS-1:2];
 
     // Cache Lookup
     logic tag_match;
@@ -73,8 +74,7 @@ module instruction_cache_controller #(
     assign cache_hit = cache_enable && cache_valid && tag_match && (current_state == TAG_CHECK);
     assign cache_miss = cache_enable && (!cache_valid || !tag_match) && (current_state == TAG_CHECK);
 
-    // Output Data
-    assign cpu_data = data_array[req_index];
+    assign cpu_data = data_array[req_index][word_select];
 
     logic [31:0] prev_addr;
 
@@ -192,7 +192,7 @@ module instruction_cache_controller #(
             // Update cache on fetch completion
             if (current_state == FETCH_SINGLE && HREADY) begin
                 tag_array[req_index] <= req_tag;
-                data_array[req_index] <= HRDATA;
+                data_array[req_index][word_select] <= HRDATA;
                 valid_array[req_index] <= 1'b1;
             end
         end
