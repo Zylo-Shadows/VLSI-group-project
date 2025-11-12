@@ -1,22 +1,27 @@
-module instruction_cache_controller (
+module instruction_cache_controller #(
+    parameter CACHE_SIZE = 1024,
+    parameter BLOCK_SIZE = 4
+)(
     // AHB-Lite Clock and Reset
     input  logic        HCLK,
     input  logic        HRESETn,
-    
+
     // AHB-Lite Master Interface (to memory)
     output logic [31:0] HADDR,
+    output logic  [1:0] HTRANS,
+    output logic  [2:0] HBURST,
+    output logic  [2:0] HSIZE,
     input  logic [31:0] HRDATA,
-    output logic [1:0]  HTRANS,
-    output logic [3:0]  HBURST,
     input  logic        HREADY,
-    output logic [2:0]  HSIZE,
+    // HRESP is currently unused, as many fetch errors would be fatal anyway
+    input  logic        HRESP
     
     // CPU Interface
     input  logic [31:0] cpu_addr,
     input  logic        cpu_req,
     output logic [31:0] cpu_data,
     output logic        cpu_ready,
-    
+
     // Cache Control
     input  logic        cache_enable,
     input  logic        cache_flush,
@@ -24,22 +29,15 @@ module instruction_cache_controller (
     output logic        cache_miss
 );
 
-    // Cache Parameters
-    localparam CACHE_SIZE = 1024;      // 1KB cache
-    localparam BLOCK_SIZE = 4;        // 4 bytes per block
-    localparam NUM_BLOCKS = CACHE_SIZE / BLOCK_SIZE;  // 256 blocks
-    localparam INDEX_BITS = 8;         // log2(256)
-    localparam TAG_BITS = 32 - INDEX_BITS - 2; //-2 for word alignment
+    localparam NUM_BLOCKS = CACHE_SIZE / BLOCK_SIZE;
+    localparam BLOCK_OFFSET_BITS = $clog2(BLOCK_SIZE);
+    localparam INDEX_BITS = $clog2(NUM_BLOCKS);
+    localparam TAG_BITS = 32 - INDEX_BITS - BLOCK_OFFSET_BITS;
 
     // AHB-Lite Transaction Types
     localparam [1:0] HTRANS_IDLE   = 2'b00;
     localparam [1:0] HTRANS_NONSEQ = 2'b10;
     localparam [1:0] HTRANS_SEQ    = 2'b11;
-
-    // AHB-Lite Burst Types (4-bit)
-    localparam [3:0] HBURST_SINGLE  = 4'b0000;
-    localparam [3:0] HBURST_INCR    = 4'b0001;
-    localparam [3:0] HBURST_INCR4   = 4'b0011;
 
     // Cache States
     typedef enum logic [2:0] {
@@ -140,7 +138,7 @@ module instruction_cache_controller (
         HADDR = cpu_addr;
         HTRANS = HTRANS_IDLE;
         HSIZE = 3'b010; // 32-bit transfers
-        HBURST = HBURST_INCR4; //Hardcoded to INCR4
+        HBURST = 3'b011; // INCR4
         
         if (current_state == FETCH_SINGLE) begin
             if (is_sequential) begin
@@ -148,9 +146,6 @@ module instruction_cache_controller (
             end else begin
                 HTRANS = HTRANS_NONSEQ; //Non-sequential transaction
             end
-        end else begin
-            //When not fetching, use SINGLE burst type
-            HBURST = HBURST_SINGLE;
         end
     end
 
