@@ -13,7 +13,7 @@ module top (
     output logic  [1:0] HTRANS,
     output logic        HWRITE,
     output logic  [2:0] HSIZE,
-    output logic  [3:0] HBURST,
+    output logic  [2:0] HBURST,
     output logic [31:0] HWDATA,
     output logic        HMASTLOCK,
     output logic  [3:0] HPROT,
@@ -27,24 +27,14 @@ module top (
     input  logic [31:0] sram_dout
 );
 
-    // Core ↔ TCM connections (data memory)
-    logic [31:0] dmem_addr;
-    logic [31:0] dmem_wdata;
-    logic [31:0] dmem_rdata;
-    logic        dmem_read;
-    logic        dmem_write;
-    logic [1:0]  dmem_size;
-    logic        dmem_ready;
-
     // Core AHB
 
     logic [31:0] imem_addr;
     logic [31:0] imem_rdata;
-    logic        imem_req;
     logic        imem_ready;
 
+	 logic        cache_hit;
 
-    // RV32E Core 
 
     RV32E core (
         .clk         (HCLK),
@@ -57,6 +47,7 @@ module top (
         .inst_ready  (imem_ready),
 
         // Data side (connected to TCM)
+		  
         .sram_cen    (sram_cen),
         .sram_wen    (sram_wen),
         .sram_ben    (sram_ben),
@@ -69,30 +60,30 @@ module top (
     // Instruction cache or AHB bus master
 instruction_cache_controller i_icache (
     // AHB-Lite interface (master port out to memory / interconnect)
+	 // Interface instantiation 
     .HCLK     (HCLK),
     .HRESETn  (HRESETn),
-    .HADDR    (HADDR),
-    .HRDATA   (HRDATA),
-    .HTRANS   (HTRANS),
-    .HREADY   (HREADY),
-    .HSIZE    (HSIZE),
+
+	 .HADDR    (HADDR),
+	 .HTRANS   (HTRANS),
+	 .HBURST   (HBURST),
+	 .HSIZE    (HSIZE),
+	 .HRDATA   (HRDATA),
+	 .HREADY   (HREADY),
+    .HRESP    (HRESP),
 
     // CPU side — connects to your core’s instruction fetch signals
     .cpu_addr   (imem_addr),
-    .cpu_req    (imem_req),
     .cpu_data   (imem_rdata),
     .cpu_ready  (imem_ready),
 
-    
-    .cache_enable (1'b1),      // enable cache always
-    .cache_flush  (1'b0),      // no flush unless you want to debug
-    .cache_hit    (),          // optional monitor
-    .cache_miss   ()
+    .cache_enable (1'b1),     // enable cache always
+    .cache_flush  (1'b0),     // no flush unless you want to debug
+    .cache_hit    (cache_hit)
 );
 
- // Fixed the AHB signals
     assign HWRITE    = 1'b0;        // Instruction fetch
-    assign HMASTLOCK = 1'b0;        // No lockes
-    assign HPROT     = 4'b1011;   
+    assign HMASTLOCK = 1'b0;        // No locks
+    assign HPROT     = 4'b1011;
 
 endmodule
