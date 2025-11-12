@@ -139,7 +139,6 @@ module instruction_cache_controller #(
             for (int i = 0; i < NUM_BLOCKS; i++) begin
                 valid_array[i] <= '0;
                 tag_array[i] <= '0;
-                data_array[i] <= '0;
             end
         end
         else if (HREADY && fetch_addr != '0) begin
