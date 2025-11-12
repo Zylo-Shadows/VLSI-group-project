@@ -7,6 +7,7 @@ module instruction_cache_controller (
     output logic [31:0] HADDR,
     input  logic [31:0] HRDATA,
     output logic [1:0]  HTRANS,
+    output logic [3:0]  HBURST,
     input  logic        HREADY,
     output logic [2:0]  HSIZE,
     
@@ -25,16 +26,20 @@ module instruction_cache_controller (
 
     // Cache Parameters
     localparam CACHE_SIZE = 1024;      // 1KB cache
-    localparam BLOCK_SIZE = 16;        // 16 bytes per block
-    localparam NUM_BLOCKS = CACHE_SIZE / BLOCK_SIZE;  // 64 blocks
-    localparam BLOCK_OFFSET_BITS = 4;  // log2(16)
-    localparam INDEX_BITS = 6;         // log2(64)
-    localparam TAG_BITS = 32 - INDEX_BITS - BLOCK_OFFSET_BITS;
+    localparam BLOCK_SIZE = 4;        // 4 bytes per block
+    localparam NUM_BLOCKS = CACHE_SIZE / BLOCK_SIZE;  // 256 blocks
+    localparam INDEX_BITS = 8;         // log2(256)
+    localparam TAG_BITS = 32 - INDEX_BITS - 2; //-2 for word alignment
 
     // AHB-Lite Transaction Types
     localparam [1:0] HTRANS_IDLE   = 2'b00;
     localparam [1:0] HTRANS_NONSEQ = 2'b10;
     localparam [1:0] HTRANS_SEQ    = 2'b11;
+
+    // AHB-Lite Burst Types (4-bit)
+    localparam [3:0] HBURST_SINGLE  = 4'b0000;
+    localparam [3:0] HBURST_INCR    = 4'b0001;
+    localparam [3:0] HBURST_INCR4   = 4'b0011;
 
     // Cache States
     typedef enum logic [2:0] {
@@ -48,44 +53,32 @@ module instruction_cache_controller (
 
     // Cache Memory Arrays
     logic [TAG_BITS-1:0]    tag_array [NUM_BLOCKS-1:0];
-    logic [127:0]           data_array [NUM_BLOCKS-1:0];  // 16 bytes per block
+    logic [31:0]           data_array [NUM_BLOCKS-1:0];  // 4 bytes per block
     logic                   valid_array [NUM_BLOCKS-1:0];
 
     // Address Parsing
     logic [TAG_BITS-1:0]    req_tag;
     logic [INDEX_BITS-1:0]  req_index;
-    logic [BLOCK_OFFSET_BITS-1:0] req_offset;
-    logic [1:0]             word_select;
 
-    assign {req_tag, req_index, req_offset} = cpu_addr;
-    assign word_select = req_offset[3:2];
+    //Extract tag and index from word-aligned address
+    assign req_tag = cpu_addr[31:INDEX_BITS+2];
+    assign req_index = cpu_addr[INDEX_BITS+1:2];
 
     // Cache Lookup
     logic tag_match;
     logic cache_valid;
-    logic [127:0] cache_block_data;
 
     assign tag_match = (tag_array[req_index] == req_tag);
     assign cache_valid = valid_array[req_index];
-    assign cache_block_data = data_array[req_index];
 
     // Hit/Miss Logic
     assign cache_hit = cache_enable && cache_valid && tag_match && (current_state == TAG_CHECK);
     assign cache_miss = cache_enable && (!cache_valid || !tag_match) && (current_state == TAG_CHECK);
 
-    // Output Data Mux
-    always_comb begin
-        case (word_select)
-            2'b00: cpu_data = cache_block_data[31:0];
-            2'b01: cpu_data = cache_block_data[63:32];
-            2'b10: cpu_data = cache_block_data[95:64];
-            2'b11: cpu_data = cache_block_data[127:96];
-        endcase
-    end
+    // Output Data
+    assign cpu_data = data_array[req_index];
 
-    //Sequential Transaction Detection
     logic [31:0] prev_addr;
-    logic is_sequential;
 
     always_ff @(posedge HCLK or negedge HRESETn) begin
         if (!HRESETn) begin
@@ -94,6 +87,10 @@ module instruction_cache_controller (
             prev_addr <= cpu_addr;
         end
     end
+
+    //Sequential Transaction Detection
+    logic is_sequential;
+    assign is_sequential = (cpu_addr == prev_addr + 4) && (current_state == FETCH_SINGLE) && (prev_addr != 32'h0);
 
     //State Machine
     always_ff @(posedge HCLK or negedge HRESETn) begin
@@ -143,6 +140,7 @@ module instruction_cache_controller (
         HADDR = cpu_addr;
         HTRANS = HTRANS_IDLE;
         HSIZE = 3'b010; // 32-bit transfers
+        HBURST = HBURST_INCR4; //Hardcoded to INCR4
         
         if (current_state == FETCH_SINGLE) begin
             if (is_sequential) begin
@@ -150,6 +148,9 @@ module instruction_cache_controller (
             end else begin
                 HTRANS = HTRANS_NONSEQ; //Non-sequential transaction
             end
+        end else begin
+            //When not fetching, use SINGLE burst type
+            HBURST = HBURST_SINGLE;
         end
     end
 
@@ -167,6 +168,10 @@ module instruction_cache_controller (
             end
             
             FETCH_SINGLE: begin
+                cpu_ready = HREADY;
+            end
+
+            FLUSH_CACHE: begin
                 cpu_ready = HREADY;
             end
         endcase
