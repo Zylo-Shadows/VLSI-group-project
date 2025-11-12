@@ -1,4 +1,5 @@
 import itertools
+import operator as op
 import random
 import subprocess
 import tempfile
@@ -14,6 +15,14 @@ BRANCH = {"beq", "bne", "blt", "bge", "bltu", "bgeu"}
 LUI_AUIPC = {"lui", "auipc"}
 JUMP = {"jal", "jalr"}
 MISC = {"fence", "ecall", "ebreak"}
+
+def signed(x, bits=32):
+    x = x & ((1 << bits) - 1)
+    return x if x < 2**(bits-1) else x - 2**bits
+
+def unsigned(x, bits=32):
+    x = x & ((1 << bits) - 1)
+    return x if x >= 0 else x + 2**bits
 
 instruction_names = [*OP, *OP_IMM, *LOAD, *STORE, *BRANCH, *LUI_AUIPC, *JUMP, *MISC]
 
@@ -55,7 +64,7 @@ def imm_size(inst_type):
     #if inst_type == J_TYPE:
     return 21
 
-def build_inst(inst_name, rd, rs1, rs2, imm, decode_outputs=False):
+def build_inst(inst_name, rd=None, rs1=None, rs2=None, imm=None, decode_outputs=False):
     """
     Build a RISC-V assembly instruction string from operand components.
 
@@ -107,14 +116,17 @@ def build_inst(inst_name, rd, rs1, rs2, imm, decode_outputs=False):
     isize = imm_size(inst_type)
     if imm is None:
         imm = random.randrange(2**isize)
-    while imm >= 2**isize:
-        imm >>= 1
-    if inst_name == "jal" or inst_name in BRANCH:
-        imm &= 0xfffffffe
-    if inst_name in {"sll", "srl", "sra", "slli", "srli", "srai"}:
-        imm %= 32
-    if imm >= 2**(isize-1) and inst_name not in LUI_AUIPC:
-        imm -= 2**isize
+    try:
+        while imm >= 2**isize:
+            imm >>= 1
+        if inst_name == "jal" or inst_name in BRANCH:
+            imm &= 0xfffffffe
+        if inst_name in {"sll", "srl", "sra", "slli", "srli", "srai"}:
+            imm %= 32
+        if imm >= 2**(isize-1) and inst_name not in LUI_AUIPC:
+            imm -= 2**isize
+    except TypeError: # imm is a string (label)
+        pass
 
     args = f"x{rd}"
     if inst_name in LOAD:
@@ -124,15 +136,19 @@ def build_inst(inst_name, rd, rs1, rs2, imm, decode_outputs=False):
         args = f"x{rs2}, {imm}(x{rs1})"
         rd = None
     elif inst_name == "jal":
-        args += f", .{imm:+d}"
+        if isinstance(imm, str):
+            args += f", .{imm}"
+        else:
+            args += f", .{imm:+d}"
         rs1 = None
         rs2 = None
     elif inst_name in LUI_AUIPC:
         args += f", {imm}"
         rs1 = None
         rs2 = None
-        imm <<= 12
-        if imm >= 2**31: imm -= 2**32
+        if not isinstance(imm, str):
+            imm <<= 12
+            if imm >= 2**31: imm -= 2**32
     elif inst_type == R_TYPE:
         args += f", x{rs1}, x{rs2}"
         imm = None
@@ -143,7 +159,10 @@ def build_inst(inst_name, rd, rs1, rs2, imm, decode_outputs=False):
         rs2 = None
         imm = None
     elif inst_name in BRANCH:
-        args = f"x{rs1}, x{rs2}, .{imm:+d}"
+        if isinstance(imm, str):
+            args = f"x{rs1}, x{rs2}, .{imm}"
+        else:
+            args = f"x{rs1}, x{rs2}, .{imm:+d}"
         rd = None
     else:
         args += f", x{rs1}, {imm}"
@@ -182,6 +201,238 @@ def build_inst(inst_name, rd, rs1, rs2, imm, decode_outputs=False):
     elif inst_name == "srai": # funct7 overlaps with imm for shift immediates
         imm += 1024
     return inst, (imm, inst_type, rs1, rs2, rd, branch, jump, compare, cmp_imm, cmp_op, alu_imm, alu_pc, alu_op, mem_read, mem_write, mem_size, mem_unsigned)
+
+def lui_offset(rd, imm):
+    ui_bits = (imm + 0x800) >> 12
+    offset = imm & 0xfff
+    if offset >= 0x800:
+        offset -= 0x1000
+    return build_inst("lui", rd, imm=ui_bits), offset
+
+def li32(rd, imm):
+    """Create lui + addi instructions to load a 32-bit value into a register"""
+    lui, offset = lui_offset(rd, imm)
+    return [lui, build_inst("addi", rd, rd, imm=offset)]
+
+def ls32(inst_name, rd_rs, addr, rs1=5, label=None):
+    if inst_name in LOAD:
+        rd = rd_rs
+        rs = None
+    else:
+        rd = None
+        rs = rd_rs
+    lui, offset = lui_offset(rs1, addr)
+    if label:
+        lui = f"{label}: " + lui
+    return [lui, build_inst(inst_name, rd, rs1, rs2=rs, imm=offset)]
+
+func = {
+    "add":  op.add,
+    "sub":  op.sub,
+    "and":  op.and_,
+    "or":   op.or_,
+    "xor":  op.xor,
+    "sll":  lambda x, y: x << (y & 0x1f),
+    "srl":  lambda x, y: unsigned(x) >> (y & 0x1f),
+    "sra":  lambda x, y: signed(x) >> (y & 0x1f),
+    "slt":  lambda x, y: signed(x) < signed(y),
+    "sltu": lambda x, y: unsigned(x) < unsigned(y),
+    "beq":  lambda x, y: unsigned(x) == unsigned(y),
+    "bne":  lambda x, y: unsigned(x) != unsigned(y),
+    "blt":  lambda x, y: signed(x) < signed(y),
+    "bge":  lambda x, y: signed(x) >= signed(y),
+    "bltu": lambda x, y: unsigned(x) < unsigned(y),
+    "bgeu": lambda x, y: unsigned(x) >= unsigned(y)
+}
+
+class InstructionTest(object):
+    def __init__(self, inst_name, rd, rs1, rs2, v1, v2, out_addr,
+                 fill1=[], fill2=[], forward=False, make_loop=False):
+        """
+        Create an object to help test the given instruciton.
+
+        Calling `self.test_sequence()` on the resulting object will create a
+        sequence of instructions to test the given instruction using the given
+        values and registers.
+
+        Parameters
+        ----------
+        inst_name : str
+            The RISC-V instruction mnemonic (e.g. "add", "sub", "lw", "beq").
+        rd : int
+            Destination register index.
+        rs1 : int
+            First source register index.
+        rs2 : int
+            Second source register index.
+        v1 : int or None
+            Effective value loaded into rs1. For load/store instructions,
+            v1 is an address. Use None for a random value.
+        v2 : int or None
+            Value loaded into rs2. For immediate ops, v2 is used as an
+            immediate baseline. Use None for a random value.
+        out_addr : int
+            Address to store the final result.
+        fill1 : list[str] or InstructionTest, optional
+            Filler instructions placed after rs1 is loaded before the
+            target instruction. For branches, this should be an
+            InstructionTest object representing a test sequence for the taken
+            branch. Set forward to True for forward branches.
+        fill2 : list[str] or InstructionTest, optional
+            Filler instructions placed after the target instruction 
+            before the final load to out_addr. For branches, this should be an
+            InstructionTest object representing a test sequence for the not
+            taken branch. fill1 and fill2 should both have the same rd.
+            The branch offset is computed based on the sizes of fill1 and fill2.
+            For jumps, fill2 is an InstructionTest representing a function body;
+            If its test sequence is already generated, then it should contain
+            a matching return jump; otherwise, one will be added. If fill2 is
+            a list, then it will be placed after the jump instruction and the
+            jump instruction will jump past it.
+        forward : bool, optional
+            Forward branch. Place fill1 after fill2 in this case.
+            Default is False.
+        make_loop : bool, optional
+            If True, add an extra add instruction to fill1 to make a for loop.
+            If False, it is assumed fill1 includes all needed instructions.
+            The number of total loops should be `abs(v1-v2)` (at least 1).
+            It is assumed the branch condition is true for the initial values.
+            Default is False.
+        """
+
+        if v1 is None:
+            v1 = random.randrange(2**32)
+        if v2 is None:
+            v2 = random.randrange(2**32)
+        self.inst_name = inst_name
+        self.rd, self.rs1, self.rs2 = rd, rs1, rs2
+        self.v1, self.v2 = v1, v2
+        self.out_addr = out_addr
+        self.lui1, self.offset1 = lui_offset(rs1, v1)
+        if inst_name in {*LOAD, *STORE}:
+            imm = self.offset1
+        elif inst_name in BRANCH:
+            imm = f"b{out_addr}"
+        elif inst_name in JUMP:
+            try:
+                jlabel = f"l{fill2.out_addr}"
+                fill2 += "ret"
+                fill2 = []
+            except AttributeError:
+                jlabel = f"l{self.out_addr}_end"
+            # To avoid "dangerous relocation" and "relocation truncated to fit",
+            # use call pseudo-op and let GCC generate jal or auipc + jalr
+            self.target_inst = f"call .{jlabel}"
+            self.imm = jlabel
+        else: # OP, OP_IMM, MISC
+            imm = v2
+        if make_loop:
+            if inst_name == "bne":
+                rs = rs2 if unsigned(v1) > unsigned(v2) else rs1
+            elif inst_name in ("bge", "bgeu"):
+                rs = rs2
+            else: # blt, bltu
+                rs = rs1
+            fill1 += build_inst("addi", rs, rs, imm=1)
+        if not getattr(self, "target_inst", False):
+            self.target_inst, do = build_inst(inst_name, rd, rs1, rs2, imm=imm, decode_outputs=True)
+            self.decode_outputs = do
+            self.imm = do[0]
+        self.fill1 = fill1
+        self.fill2 = fill2
+        self.forward = forward
+        self.extra = []
+
+    def test_sequence(self, store_out=True):
+        """
+        Create an instruction sequence to test this instruction.
+
+        Parameters
+        ----------
+        store_out : bool, optional
+            Include a final instruction to store rd to out_addr.
+            This also determines if an initial label is added.
+            Default is True.
+
+        Returns
+        -------
+        instructions, expected : list[str], int
+            Sequence of instructions and expected output
+        """
+
+        inst_name, rd, rs1, rs2 = self.inst_name, self.rd, self.rs1, self.rs2
+        v1, v2, imm = self.v1, self.v2, self.imm
+        fill1, fill2 = self.fill1, self.fill2
+        if self.inst_name in {*LOAD, *STORE}:
+            waddr = (v1 >> 2) << 2
+            offset = v1 - waddr
+            bits = {'b': 8, 'h': 16, 'w': 32}[inst_name[1]]
+            instructions = ls32("sw", 0, waddr)
+        else:
+            instructions = []
+        sw = lw = []
+        addi1 = ""
+        expected = 0
+        if inst_name in LOAD:
+            sw = ls32("sw", rs2, waddr, rs1)
+            if inst_name.endswith('u'):
+                expected = unsigned(v2 << (offset*8), bits)
+            else:
+                expected = signed(v2 << (offset*8), bits)
+        elif inst_name in STORE:
+            lw = ls32("lw", rd, waddr, rs1)
+            expected = unsigned(v2, bits) << (offset*8)
+        elif inst_name in {*OP, *OP_IMM} - {"nop"}:
+            addi1 = build_inst("addi", rs1, rs1, imm=self.offset1)
+            if rd:
+                expected = signed(int(func[inst_name.replace('i', "")](v1, v2 if rs2 is not None else imm)))
+        elif inst_name in BRANCH:
+            if rd is None:
+                rd = fill2.rd
+            fill1, expected1 = fill1.test_sequence(store_out=False)
+            fill2, expected2 = fill2.test_sequence(store_out=False)
+            fill1[0] = f".b{self.out_addr}: " + fill1[0]
+            if self.forward:
+                # place fill1 after fill2, where lw would normally go
+                fill1, lw = [], fill1
+                fill2.append(build_inst("beq", 0, 0, 0, f"l{self.out_addr}_end"))
+                expected = expected1 if func[inst_name](v1, v2) else expected2
+            else:
+                expected = expected2
+        elif inst_name in JUMP:
+            rs = rs2 if rs2 else rs1
+            self.extra.append(f"la x{rs}, .j{self.out_addr}")
+            self.extra.append(build_inst("sub", rd=rd, rs1=rd, rs2=rs))
+            if fill2:
+                fill2[0] = f".j{self.out_addr}: " + fill2[0]
+            else:
+                self.extra[0] = f".j{self.out_addr}: " + self.extra[0]
+            expected = 0
+        else: # MISC
+            expected = 0
+        instructions += [*li32(rs2, v2), *sw, self.lui1, addi1, *fill1, self.target_inst, *fill2, *lw]
+        instructions += self.extra
+        if store_out:
+            instructions.extend(ls32("sw", rd, self.out_addr, label=f".l{self.out_addr}_end"))
+            instructions[0] = f".l{self.out_addr}: " + instructions[0]
+        elif inst_name in BRANCH:
+            instructions.append(f".l{self.out_addr}_end: nop")
+        # omit "" from instructions
+        return [i for i in instructions if i], signed(expected) if rd else 0
+
+    def __iadd__(self, inst):
+        self.extra.append(inst)
+        return self
+
+    def __iter__(self):
+        return iter(self.test_sequence(store_out=False)[0])
+
+    def __len__(self):
+        return len(self.test_sequence(store_out=False)[0])
+
+    def __repr__(self):
+        return f"InstructionTest({self.inst_name}, {self.rd}, {self.rs1}, {self.rs2}, {self.v1}, {self.v2}, {self.out_addr}, " \
+               f"{self.fill1}, {self.fill2}, {self.forward})"
 
 def assemble_riscv(asm_code: str, output_bin: str, march="rv32e", mabi="ilp32e"):
     """Compile RISC-V assembly string to a raw binary file."""
@@ -253,19 +504,7 @@ def run_testbench(tb_module: str, instr_bin: str, *dut_files) -> str:
         ], cwd=tmpdir, capture_output=True, text=True, check=True)
         return result.stdout
 
-def main(bin_file, instructions):
-    instructions[:] = [".section .text", ".globl _start", "_start:"]+["nop"]*FILL
-    expected_outputs = []
-
-    regs2test = [0, 1, 2, 4, 8, 15]
-    for inst_name in instruction_names:
-        for imm in [0x80000000, 0, 1, 0x7fffffff, 0xffffffff, *random.choices(range(2**32), k=3)]:
-            for rs1, rs2, rd in itertools.product(regs2test, repeat=3):
-                inst, outputs = build_inst(inst_name, rs1=rs1, rs2=rs2, rd=rd, imm=imm, decode_outputs=True)
-                instructions.append(inst)
-                expected_outputs.append(outputs)
-    instructions.extend(["nop"]*FILL)
-
+def test_decode(bin_file, instructions, expected_outputs):
     try:
         assemble_riscv("\n".join(instructions), bin_file)
     except:
@@ -282,12 +521,102 @@ def main(bin_file, instructions):
                 return 2
     return 0
 
+def main(bin_file, instructions):
+    instructions[:] = [".section .text", ".globl _start", "_start:"]+["nop"]*FILL
+    tests = []
+    expected_outputs = []
+
+    test_vals = [0x80000000, 0, 1, 0x7fffffff, 0xffffffff, None]
+    regs2test = [0, 2, 4, 8, 15]
+    bregs = [7, 9, 11]
+    ra, rdb = 1, 3
+
+    for inst_name in instruction_names:
+        for v1, v2 in itertools.product(test_vals, repeat=2):
+            for rs1, rs2, rd in itertools.product(regs2test, repeat=3):
+                inst, outputs = build_inst(inst_name, rs1=rs1, rs2=rs2, rd=rd, imm=v2, decode_outputs=True)
+                instructions.append(inst)
+                expected_outputs.append(outputs)
+                if inst_name in {*BRANCH, *LUI_AUIPC, *JUMP}:
+                    continue
+                # else
+                tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rd, v1=v1, v2=v2, out_addr=4*(len(tests)+1)))
+                tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rdb, v1=v1, v2=v2, out_addr=4*(len(tests)+1)))
+
+    instructions.extend(["nop"]*FILL)
+
+    exit_code = test_decode(bin_file, instructions, expected_outputs)
+    if exit_code != 0:
+        return exit_code
+
+    instructions[:] = [".section .text", ".globl _start", "_start:"]
+    expected_outputs = {}
+
+    inst_pool = [t.target_inst for t in tests[::2]]
+    for i in range(1, len(tests), 2):
+        tests[i].extra.extend(random.choices(inst_pool, k=5))
+
+    fillers = tests[1::2]
+
+    for inst_name in BRANCH:
+        for v1, v2 in itertools.product(test_vals, repeat=2):
+            for rs1, rs2 in itertools.product(bregs, repeat=2):
+                fill1 = random.choice(fillers)
+                fill2 = random.choice(fillers)
+                tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rdb, v1=v1, v2=v2, out_addr=4*(len(tests)+1),
+                                             fill1=fill1, fill2=fill2, make_loop=True))
+                tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rdb, v1=v1, v2=v2, out_addr=4*(len(tests)+1),
+                                             fill1=fill1, fill2=fill2, forward=True))
+
+    for inst_name in JUMP:
+        for rs1, rs2 in itertools.product(set(regs2test + bregs)-{0}, repeat=2):
+            fill1 = random.choice(fillers)
+            idx2 = random.randrange(len(fillers))
+            fill2 = fillers[idx2]
+            test = InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=ra, v1=None, v2=None, out_addr=4*(len(tests)+1),
+                                   fill1=fill1, fill2=fill2)
+            if inst_name == "jal":
+                # place close to function body, so call generates JAL
+                idx = max(0, 2*idx2 + random.randrange(-2**12, 2**12))
+                tests.insert(idx, test)
+            else:
+                tests.insert(random.randrange(len(tests)), test)
+            tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=ra, v1=None, v2=None, out_addr=4*(len(tests)+1),
+                                         fill1=fill1, fill2=list(fill2)))
+
+    sequenced = set()
+
+    for test in tests:
+        if test.out_addr not in sequenced:
+            test_sequence, output = test.test_sequence()
+            instructions.extend(test_sequence)
+            expected_outputs[test.out_addr] = output
+            sequenced.add(test.out_addr)
+
+    try:
+        assemble_riscv("\n".join(instructions), bin_file)
+    except:
+        return 1
+    # TODO change to final filenames
+    output = run_testbench("tb_RV32E", bin_file, "definitions.vh", "types.sv", "pc_reg.v",
+                           "register_file.v", "instruction_decoder.sv", "immediate_builder.sv", "dependency_checker.sv",
+                           "compare.v", "mux_4to1.v", "alu.v", "conv33.v", "dsp.v", "RV32E.sv", "ahb3lite_mem_subsystem.v")
+
+    for i, outputs in enumerate(re.findall(r"^#?\s*(\d+)\s+(\-?\d+)$", output, re.MULTILINE)):
+        out_addr, output = output
+        if int(output) != expected_outputs[out_addr]:
+            print(f"{out_addr}: {output}!={expected_outputs[out_addr]}")
+            return 3
+
 if __name__ == "__main__":
     bin_file = "instructions.bin"
     instructions = []
     exit_code = main(bin_file, instructions)
-    if exit_code != 0:
+    if exit_code == 2:
         with open("tb_decode.s", 'w') as f:
+            f.write("\n".join(instructions))
+    elif exit_code != 0:
+        with open("tb_top.s", "w") as f:
             f.write("\n".join(instructions))
     else:
         subprocess.run(["rm", bin_file])
