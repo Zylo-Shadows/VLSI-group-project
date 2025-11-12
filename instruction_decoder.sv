@@ -56,12 +56,12 @@ module instruction_decoder (
         case (alu_op)
             ALU_SLT: begin
                 compare = 1;
-                cmp_op = CMP_BLT;
+                cmp_op = CMP_LT;
             end
 
             ALU_SLTU: begin
                 compare = 1;
-                cmp_op = CMP_BLTU;
+                cmp_op = CMP_LTU;
             end
 
             default: begin

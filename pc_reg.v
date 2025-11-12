@@ -7,7 +7,7 @@ module pc_reg (
     input  wire [31:0] pc_in,
     output reg  [31:0] pc_out,
     output wire [31:0] pc_plus_4,
-    output wire [31:0] pc_next
+    output reg  [31:0] pc_next
 );
 
     always @(posedge clk) begin
