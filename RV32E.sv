@@ -267,14 +267,34 @@ module RV32E (
     assign sram_addr = alu_result_ex;
     assign sram_din  = rs2_data_ex;
     assign sram_wen  = !mem_write_ex;
-    assign sram_ben  = {{2{mem_size_ex > 1}}, mem_size_ex > 0, 1'b1};
+
+    // Generate byte enables based on access size and address offset
+    always_comb begin
+        unique case (mem_size_ex)
+            2'b00: begin // byte
+                sram_ben = 4'b1111;
+                sram_ben[sram_addr[1:0]] = 1'b0;  // one byte active (active low)
+            end
+            2'b01: begin // halfword
+                case (sram_addr[1])
+                    1'b0: sram_ben = 4'b1100; // lower halfword
+                    1'b1: sram_ben = 4'b0011; // upper halfword
+                endcase
+            end
+            2'b10: sram_ben = 4'b0000; // full word
+            default: sram_ben = 4'b1111;
+        endcase
+    end
 
     always_comb begin
-        mem_data = sram_dout;
-        if (!sram_ben[1])
-            mem_data[15:8] = (mem_unsigned_ex ? 8'd0 : {8{sram_dout[7]}});
-        if (!sram_ben[2])
-            mem_data[31:16] = {2{(mem_unsigned_ex ? 8'd0 : {8{sram_dout[7]}})}};
+        mem_data = sram_dout >> (8 * sram_addr[1:0]);
+        case (mem_size_ex)
+            2'b00: // byte
+                mem_data[31:8] = mem_unsigned_ex ? 24'b0 : {24{mem_data[7]}};
+            2'b01: // halfword
+                mem_data[31:16] = mem_unsigned_ex ? 16'b0 : {16{mem_data[15]}};
+            default:;
+        endcase
     end
 
     always_comb begin
