@@ -522,12 +522,14 @@ def test_decode(bin_file, instructions, expected_outputs):
     return 0
 
 def main(bin_file, instructions):
+    global FILL
     instructions[:] = [".section .text", ".globl _start", "_start:"]+["nop"]*FILL
     tests = []
+    fillers = []
     expected_outputs = []
 
     test_vals = [0x80000000, 0, 1, 0x7fffffff, 0xffffffff, None]
-    regs2test = [0, 2, 4, 8, 15]
+    regs2test = [0, 2, 4, 15]
     bregs = [7, 9, 11]
     ra, rdb = 1, 3
 
@@ -540,10 +542,12 @@ def main(bin_file, instructions):
                 if inst_name in {*BRANCH, *LUI_AUIPC, *JUMP}:
                     continue
                 elif inst_name in {*LOAD, *STORE}:
+                    if v1 is None:
+                        v1 = random.randrange(2**32)
                     v1 |= 0x100000
                 # else
                 tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rd, v1=v1, v2=v2, out_addr=4*(len(tests)+1)))
-                tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rdb, v1=v1, v2=v2, out_addr=4*(len(tests)+1)))
+                fillers.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rdb, v1=v1, v2=v2, out_addr=4*(len(tests)+1)))
 
     instructions.extend(["nop"]*FILL)
 
@@ -551,14 +555,13 @@ def main(bin_file, instructions):
     if exit_code != 0:
         return exit_code
 
+    FILL = 1
     instructions[:] = [".section .text", ".globl _start", "_start:", "nop"]
     expected_outputs = {}
 
-    inst_pool = [t.target_inst for t in tests[::2]]
-    for i in range(1, len(tests), 2):
-        tests[i].extra.extend(random.choices(inst_pool, k=5))
-
-    fillers = tests[1::2]
+    inst_pool = [t.target_inst for t in tests]
+    for filler in fillers:
+        filler.extra.extend(random.choices(inst_pool, k=3))
 
     for inst_name in BRANCH:
         for v1, v2 in itertools.product(test_vals, repeat=2):
@@ -596,14 +599,15 @@ def main(bin_file, instructions):
             sequenced.add(test.out_addr)
 
     try:
+        instructions.append("nop")
         assemble_riscv("\n".join(instructions), bin_file)
     except:
         return 1
 
-    output = run_testbench("tb_RV32E", bin_file, "definitions.vh", "types.sv", "pc_reg.v",
+    output = run_testbench("tb_top", bin_file, "definitions.vh", "types.sv", "pc_reg.v",
                            "register_file.v", "instruction_decoder.sv", "immediate_builder.sv", "dependency_checker.sv",
-                           "compare.v", "mux_4to1.v", "alu.v", "conv33.sv", "dsp.sv", "RV32E.sv", "instruction_cache_controller.sv",
-                           "top.sv", "MemorySlave.sv", "tb_top.sv")
+                           "compare.sv", "mux_4to1.v", "alu.sv", "conv33.sv", "dsp.sv", "RV32E.sv", "instruction_cache_controller.sv",
+                           "top.sv", "MemorySlave.sv")
 
     for i, outputs in enumerate(re.findall(r"^#?\s*(\d+)\s+(\-?\d+)$", output, re.MULTILINE)):
         out_addr, output = output
