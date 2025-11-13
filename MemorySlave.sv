@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+`include "definitions.vh"
 
 module MemorySlave #(
     parameter MEM_SIZE = 256,
@@ -14,7 +15,8 @@ module MemorySlave #(
     output logic [31:0] HRDATA,
     output logic        HREADY,
     output logic [1:0]  HRESP,
-    input  logic        HSEL
+    input  logic        HSEL,
+    output integer      num_instr
 );
 
     typedef enum logic [1:0] {
@@ -24,7 +26,24 @@ module MemorySlave #(
         SEQ      = 2'b11
     } htrans_t;
 
-    logic [31:0] mem [0:MEM_SIZE-1];
+    logic [31:0] mem [0:MEM_SIZE/4-1];
+
+    integer fd;
+
+    initial begin
+        fd = $fopen("instructions.bin","rb");
+        num_instr = $fread(mem, fd);
+        $fclose(fd);
+
+        for (int i = 0; i < MEM_SIZE/4; i++) begin
+            if (i < num_instr)
+                mem[i] = {mem[i][7:0], mem[i][15:8], mem[i][23:16], mem[i][31:24]};
+            else
+                mem[i] = NOP;
+        end
+
+        $display("Instruction memory loaded");
+    end
 
     logic [$clog2(LATENCY+1)-1:0] latency_cnt;
     logic        busy;
