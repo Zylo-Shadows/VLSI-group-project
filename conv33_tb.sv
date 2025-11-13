@@ -1,4 +1,3 @@
-
 `timescale 1ns/1ps
 
 module conv33_tb;
@@ -32,20 +31,21 @@ module conv33_tb;
   // driver
   int i, out_idx;
   int c; // column index
-
-
+  int need = W_out * W_out;
+ 
   initial begin
     $readmemh("p_input_252x252.hex", p);
     rst_n    = 0;
     shift_en = 0;
     mode     = 2'b01; // 0=pass, 1=sharpen, 2=gaussian blur, 3 = edge detect 
     pix_top  = 0; pix_mid = 0; pix_bot = 0;
+    out_idx  = 0;
     repeat (4) @(posedge clk);
     rst_n = 1;
 
 
     // Stream the image, one pixel position at a time
-    for (i = 0; i < N-1 - 2*W_in; i++)
+    for (i = 0; i < N - 2*W_in; i++) begin
 
       c = i % W_in; // this indexes the column so we are reading correct window
 
@@ -57,15 +57,13 @@ module conv33_tb;
       shift_en <= 0;
       rst_n <= 1;
 
-     // Cycle 2: Capture the output
-     @(posedge clk);
-     if (c >= 2) begin                // ignore the first two columns in every row
-       outm[out_idx] <= pixel_out;    // store only when we expect a full window
-       out_idx++;
-     end
-     shift_en <= 1;
-
-      
+      // Cycle 2: Capture the output
+      @(posedge clk);
+      if (c >= 2) begin                // ignore the first two columns in every row
+        outm[out_idx] <= pixel_out;    // store only when we expect a full window
+        out_idx++;
+      end
+      shift_en <= 1;
 
       // End Row cycle: clear the modules registers at the last column of the row
       if (c == W_in-1) begin
@@ -77,10 +75,17 @@ module conv33_tb;
       end
     end
 
+    repeat (3) @(posedge clk); // allow the DUT to output last pixels
+    while (out_idx < need) begin
+     @(posedge clk);
+     outm[out_idx] <= pixel_out;
+     out_idx++;
+    end
+
     // finish and dump output
     $writememh("conv_out_250x250.hex", outm);
     $display("Wrote conv_out_250x250.hex");
-    $finish;
+    $stop;
   end
 
 endmodule
