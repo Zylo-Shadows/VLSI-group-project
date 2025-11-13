@@ -40,7 +40,7 @@ module RV32E (
     logic [31:0] mem_data;
 
     // Register addresses
-    logic [4:0] rs1_addr, rs2_addr;
+    logic [4:0] rs1_addr, rs2_addr_id, rs2_addr_ex;
     logic [4:0] rd_addr_id, rd_addr_ex, rd_addr_mem;
 
     // Control signals
@@ -57,6 +57,10 @@ module RV32E (
     logic [1:0] alu_src_a_ex, alu_src_b_ex;
     logic alu_imm_id, alu_imm_ex;
     logic alu_pc_id, alu_pc_ex;
+
+    // DSP
+    logic dsp_shift_en;
+    logic [31:0] r16, r17, r18, dsp_out;
 
     // Branch compare
     logic cmp_id, cmp_ex, cmp_mem;
@@ -84,6 +88,7 @@ module RV32E (
             rs1_data_ex    <= 32'b0;
             rs2_data_ex    <= 32'b0;
             immediate_ex   <= 32'b0;
+            rs2_addr_ex    <= 5'b0;
             rd_addr_ex     <= 5'b0;
             mem_read_ex    <= 1'b0;
             mem_write_ex   <= 1'b0;
@@ -124,6 +129,7 @@ module RV32E (
             rs1_data_ex    <= rs1_data_id;
             rs2_data_ex    <= rs2_data_id;
             immediate_ex   <= immediate_id;
+            rs2_addr_ex    <= rs2_addr_id;
             rd_addr_ex     <= rd_addr_id;
             mem_read_ex    <= mem_read_id;
             mem_write_ex   <= mem_write_id;
@@ -187,18 +193,23 @@ module RV32E (
         .rst_n(rst_n),
         .write_en(!branch_mem),
         .rs1_addr(rs1_addr),
-        .rs2_addr(rs2_addr),
+        .rs2_addr(rs2_addr_id),
         .rd_addr(rd_addr_mem),
         .rd_data(rd_data_mem),
         .rs1_data(rs1_data_id),
-        .rs2_data(rs2_data_id)
+        .rs2_data(rs2_data_id),
+        .r16(r16),
+        .r17(r17),
+        .r18(r18)
     );
+
+    assign dsp_shift_en = (rd_addr_mem == 5'd16);
 
     instruction_decoder decoder (
         .instruction(instruction_id),
         .instruction_format(inst_fmt),
         .rs1_addr(rs1_addr),
-        .rs2_addr(rs2_addr),
+        .rs2_addr(rs2_addr_id),
         .rd_addr(rd_addr_id),
         .branch(branch_id),
         .jump(jump_id),
@@ -222,7 +233,7 @@ module RV32E (
 
     dependency_checker dpc (
         .rs1_addr(rs1_addr),
-        .rs2_addr(rs2_addr),
+        .rs2_addr(rs2_addr_id),
         .rd1_addr(rd_addr_ex),
         .rd2_addr(rd_addr_mem),
         .alu_src1(alu_src_a_id),
@@ -261,11 +272,20 @@ module RV32E (
         .result(alu_result_ex)
     );
 
-    // TODO DSP module instantiation
+    dsp dsp (
+        .clk(clk),
+        .rst_n(rst_n),
+        .shift_en(dsp_shift_en),
+        .mode(2'b0),
+        .top_pix(r16),
+        .mid_pix(r17),
+        .bot_pix(rd_addr_mem == 5'd18 ? rd_data_mem : r18),
+        .pixel_out(dsp_out)
+    );
 
     assign sram_cen  = !rst_n;
     assign sram_addr = alu_result_ex;
-    assign sram_din  = rs2_data_ex;
+    assign sram_din  = (rs2_addr_ex == 5'd19 ? dsp_out : rs2_data_ex);
     assign sram_wen  = !mem_write_ex;
 
     // Generate byte enables based on access size and address offset
