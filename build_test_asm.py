@@ -267,7 +267,7 @@ class InstructionTest(object):
             Second source register index.
         v1 : int or None
             Effective value loaded into rs1. For load/store instructions,
-            v1 is an address. Use None for a random value.
+            v1 is an address above 0xfffff. Use None for a random value.
         v2 : int or None
             Value loaded into rs2. For immediate ops, v2 is used as an
             immediate baseline. Use None for a random value.
@@ -539,6 +539,8 @@ def main(bin_file, instructions):
                 expected_outputs.append(outputs)
                 if inst_name in {*BRANCH, *LUI_AUIPC, *JUMP}:
                     continue
+                elif inst_name in {*LOAD, *STORE}:
+                    v1 |= 0x100000
                 # else
                 tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rd, v1=v1, v2=v2, out_addr=4*(len(tests)+1)))
                 tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rdb, v1=v1, v2=v2, out_addr=4*(len(tests)+1)))
@@ -549,7 +551,7 @@ def main(bin_file, instructions):
     if exit_code != 0:
         return exit_code
 
-    instructions[:] = [".section .text", ".globl _start", "_start:"]
+    instructions[:] = [".section .text", ".globl _start", "_start:", "nop"]
     expected_outputs = {}
 
     inst_pool = [t.target_inst for t in tests[::2]]
@@ -597,10 +599,11 @@ def main(bin_file, instructions):
         assemble_riscv("\n".join(instructions), bin_file)
     except:
         return 1
-    # TODO change to final filenames
+
     output = run_testbench("tb_RV32E", bin_file, "definitions.vh", "types.sv", "pc_reg.v",
                            "register_file.v", "instruction_decoder.sv", "immediate_builder.sv", "dependency_checker.sv",
-                           "compare.v", "mux_4to1.v", "alu.v", "conv33.v", "dsp.v", "RV32E.sv", "ahb3lite_mem_subsystem.v")
+                           "compare.v", "mux_4to1.v", "alu.v", "conv33.sv", "dsp.sv", "RV32E.sv", "instruction_cache_controller.sv",
+                           "top.sv", "MemorySlave.sv", "tb_top.sv")
 
     for i, outputs in enumerate(re.findall(r"^#?\s*(\d+)\s+(\-?\d+)$", output, re.MULTILINE)):
         out_addr, output = output
