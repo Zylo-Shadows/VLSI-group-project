@@ -13,16 +13,14 @@ module pc_reg (
     always @(posedge clk) begin
         if (!rst_n)
             pc_out <= pc_start;
-        else
+        else if (pc_en)
             pc_out <= pc_next;
     end
 
     assign pc_plus_4 = pc_out + 32'd4;
 
     always @(*) begin
-        if (!pc_en)
-            pc_next = pc_out;
-        else if (pc_load)
+        if (pc_load)
             pc_next = pc_in;
         else
             pc_next = pc_plus_4;
