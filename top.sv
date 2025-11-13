@@ -78,7 +78,6 @@ instruction_cache_controller i_icache (
     .cpu_ready  (imem_ready),
 
     .cache_enable (1'b1),     // enable cache always
-    .cache_flush  (1'b0),     // no flush unless you want to debug
     .cache_hit    (cache_hit)
 );
 
