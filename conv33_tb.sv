@@ -13,8 +13,8 @@ module conv33_tb;
   logic [7:0] pixel_out;
 
   // Memories
-  logic [7:0] p     [0:N-1];
-  logic [7:0] outm  [0:W_out * W_out-1];
+  logic [7:0] p     [0:N-1];  // input hex file
+  logic [7:0] outm  [0:W_out * W_out-1]; // output hex file
 
   // DUT
   conv33 #(.PIXEL_WIDTH(8)) dut (
@@ -31,7 +31,7 @@ module conv33_tb;
 
   // driver
   int i, out_idx;
-  int r, c; // row and column indices
+  int c; // column index
 
 
   initial begin
@@ -42,37 +42,38 @@ module conv33_tb;
     pix_top  = 0; pix_mid = 0; pix_bot = 0;
     repeat (4) @(posedge clk);
     rst_n = 1;
-    row_reset = 1;
+
 
     // Stream the image, one pixel position at a time
     for (i = 0; i < N-1 - 2*W_in; i++)
 
-      r = i / W_in; // row
-      c = i % W_in; // col
+      c = i % W_in; // this indexes the column so we are reading correct window
+
       // cycle 1: present the three rows for this column; hold window (no shift)
       @(posedge clk);
       pix_top  <= p[i];
       pix_mid  <= p[i+W_in];
       pix_bot  <= p[i+2*W_in];
       shift_en <= 0;
-      row_reset <= 1;
+      rst_n <= 1;
 
-      // cycle 2: sample output from previous window and then shift
-      @(posedge clk);
-      if (x >= 2) begin
-        out_idx = y*OW + (x-2);
-        outm[out_idx] <= pixel_out;
-      end
-      shift_en <= 1;
+     // Cycle 2: Capture the output
+     @(posedge clk);
+     if (c >= 2) begin                // ignore the first two columns in every row
+       outm[out_idx] <= pixel_out;    // store only when we expect a full window
+       out_idx++;
+     end
+     shift_en <= 1;
+
       
 
-      // if this was the LAST column of the row, insert a boundary clear cycle
-      if (col(i) == W_in-1) begin
+      // End Row cycle: clear the modules registers at the last column of the row
+      if (c == W_in-1) begin
         @(posedge clk);
         shift_en  <= 0;     // don't shift during clear
-        row_reset <= 0;     // clears the 6 regs inside DUT
+        rst_n <= 0;     // clears the 6 regs inside DUT
         @(posedge clk);
-        row_reset <= 1;     // ready for the next row col=0
+        rst_n <= 1;     // ready for the next row col=0
       end
     end
 
