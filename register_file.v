@@ -6,8 +6,11 @@ module register_file (
     input  wire [4:0]  rs2_addr,
     input  wire [4:0]  rd_addr,
     input  wire [31:0] rd_data,
-    output reg [31:0] rs1_data, 
-    output reg [31:0] rs2_data
+    output reg  [31:0] rs1_data, 
+    output reg  [31:0] rs2_data,
+    output reg  [31:0] r16,
+    output reg  [31:0] r17,
+    output reg  [31:0] r18
 );
     // 16+3 registers for DSP
     reg [31:0] regfile [0:18];
@@ -25,5 +28,9 @@ module register_file (
 
     assign rs1_data = regfile[rs1_addr];
     assign rs2_data = regfile[rs2_addr];
+
+    assign r16 = regfile[5'd16];
+    assign r17 = regfile[5'd17];
+    assign r18 = regfile[5'd18];
 
 endmodule
