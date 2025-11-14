@@ -27,13 +27,13 @@ module RV32E (
     // Register file pipeline signals
     logic [31:0] rs1_data_id, rs2_data_id;
     logic [31:0] rs1_data_ex, rs2_data_ex;
+    logic [31:0] rs1_data, rs2_data;
     logic [31:0] rd_data_mem, rd_data_wb;
 
     // Immediate
     logic [31:0] immediate_id, immediate_ex;
 
     // ALU operands/results
-    logic [31:0] alu_operand_a, alu_operand_b;
     logic [31:0] alu_result_ex, alu_result_mem;
 
     // Memory data
@@ -52,9 +52,11 @@ module RV32E (
     logic [1:0] mem_size_id, mem_size_ex;
     alu_op_t alu_op_id, alu_op_ex;
 
+    // Forwarding
+    logic [1:0] src1_id, src2_id;
+    logic [1:0] src1_ex, src2_ex;
+
     // ALU source control
-    logic [1:0] alu_src_a_id, alu_src_b_id;
-    logic [1:0] alu_src_a_ex, alu_src_b_ex;
     logic alu_imm_id, alu_imm_ex;
     logic alu_pc_id, alu_pc_ex;
 
@@ -95,8 +97,8 @@ module RV32E (
             mem_size_ex    <= 2'b0;
             mem_unsigned_ex<= 1'b0;
             alu_op_ex      <= alu_op_t'(4'b0);
-            alu_src_a_ex   <= 2'b0;
-            alu_src_b_ex   <= 2'b0;
+            src1_ex   <= 2'b0;
+            src2_ex   <= 2'b0;
             alu_imm_ex     <= 1'b0;
             alu_pc_ex      <= 1'b0;
             branch_ex      <= 1'b0;
@@ -136,8 +138,8 @@ module RV32E (
             mem_size_ex    <= mem_size_id;
             mem_unsigned_ex<= mem_unsigned_id;
             alu_op_ex      <= alu_op_id;
-            alu_src_a_ex   <= alu_src_a_id;
-            alu_src_b_ex   <= alu_src_b_id;
+            src1_ex   <= src1_id;
+            src2_ex   <= src2_id;
             alu_imm_ex     <= alu_imm_id;
             alu_pc_ex      <= alu_pc_id;
             branch_ex      <= branch_id;
@@ -236,8 +238,8 @@ module RV32E (
         .rs2_addr(rs2_addr_id),
         .rd1_addr(rd_addr_ex),
         .rd2_addr(rd_addr_mem),
-        .alu_src1(alu_src_a_id),
-        .alu_src2(alu_src_b_id)
+        .src1(src1_id),
+        .src2(src2_id)
     );
 
     compare CMPU (
@@ -247,27 +249,25 @@ module RV32E (
         .result(cmp_result_id)
     );
 
-    mux_4to1 #(.WIDTH(32)) alu_mux_a (
-        .sel(alu_pc_ex ? 2'd3 : alu_src_a_ex),
+    mux_3to1 #(.WIDTH(32)) rs1_data_mux (
+        .sel(src1_ex),
         .in0(rs1_data_ex),
         .in1(rd_data_mem),
         .in2(rd_data_wb),
-        .in3(pc_ex),
-        .out(alu_operand_a)
+        .out(rs1_data)
     );
 
-    mux_4to1 #(.WIDTH(32)) alu_mux_b (
-        .sel(alu_imm_ex ? 2'd3 : alu_src_b_ex),
+    mux_3to1 #(.WIDTH(32)) rs2_data_mux (
+        .sel(src2_ex),
         .in0(rs2_data_ex),
         .in1(rd_data_mem),
         .in2(rd_data_wb),
-        .in3(immediate_ex),
-        .out(alu_operand_b)
+        .out(rs2_data)
     );
 
     alu ALU (
-        .operand_a(alu_operand_a),
-        .operand_b(alu_operand_b),
+        .operand_a(alu_pc_ex ? pc_ex : rs1_data),
+        .operand_b(alu_imm_ex ? immediate_ex : rs2_data),
         .alu_op(alu_op_ex),
         .result(alu_result_ex)
     );
@@ -285,7 +285,7 @@ module RV32E (
 
     assign sram_cen  = !rst_n;
     assign sram_addr = alu_result_ex;
-    assign sram_din  = (rs2_addr_ex == 5'd19 ? dsp_out : rs2_data_ex);
+    assign sram_din  = (rs2_addr_ex == 5'd19 ? dsp_out : rs2_data);
     assign sram_wen  = !mem_write_ex;
 
     // Generate byte enables based on access size and address offset

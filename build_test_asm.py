@@ -608,7 +608,7 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
     tb_module = "tb_core" if test_core else "tb_top"
     output = run_testbench(tb_module, bin_file, "definitions.vh", "types.sv", "pc_reg.v",
                            "register_file.v", "instruction_decoder.sv", "immediate_builder.sv", "dependency_checker.sv",
-                           "compare.sv", "mux_4to1.v", "alu.sv", "conv33.sv", "dsp.sv", "RV32E.sv", "instruction_cache_controller.sv",
+                           "compare.sv", "mux_3to1.sv", "alu.sv", "conv33.sv", "dsp.sv", "RV32E.sv", "instruction_cache_controller.sv",
                            "top.sv", "MemorySlave.sv")
 
     for i, outputs in enumerate(re.findall(r"^#?\s*(\d+)\s+(\-?\d+)$", output, re.MULTILINE)):
