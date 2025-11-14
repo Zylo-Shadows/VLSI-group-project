@@ -48,9 +48,11 @@ module tb_core;
     .sram_dout(sram_dout)
   );
 
-  logic [7:0][3:0] mem [0:2**24-1];
-  logic [23:0] addr;
-  assign addr = sram_addr[25:2];
+  localparam MEM_SIZE = 2**24;
+
+  logic [3:0][7:0] mem [0:MEM_SIZE-1];
+  logic [$clog2(MEM_SIZE)-1:0] addr;
+  assign addr = sram_addr[$clog2(MEM_SIZE)+1:2];
 
   always_ff @(posedge clk) begin
     if (!sram_cen) begin
