@@ -84,7 +84,7 @@ module RV32E (
             // ---------------- ID/EX Reset ----------------
             pc_ex          <= 32'b0;
             pc_plus_4_ex   <= 32'b0;
-            pc_load_ex     <= 1'b0;
+            pc_load_ex     <= 1'b1;
             rs1_data_ex    <= 32'b0;
             rs2_data_ex    <= 32'b0;
             immediate_ex   <= 32'b0;
@@ -178,8 +178,8 @@ module RV32E (
         .rst_n(rst_n),
         .pc_en(inst_ready),
         .pc_start(boot_addr),
-        .pc_load(pc_load_ex), 
-        .pc_in(pc_target),
+        .pc_load(pc_load_ex),
+        .pc_in(!rst_n ? boot_addr : pc_target),
         .pc_out(pc_if),
         .pc_plus_4(pc_plus_4_if),
         .pc_next(pc_next)
