@@ -600,14 +600,14 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
             tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=ra, v1=None, v2=None, out_addr=4*(len(tests)+1),
                                          fill1=fill1, fill2=list(fill2)))
 
-    sequenced = set()
+    sequenced = {}
 
     for test in tests:
         if test.out_addr not in sequenced:
             test_sequence, output = test.test_sequence()
             instructions.extend(test_sequence)
             expected_outputs[test.out_addr] = output
-            sequenced.add(test.out_addr)
+            sequenced[test.out_addr] = test_sequence
 
     try:
         instructions.append("nop")
@@ -621,13 +621,19 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
                            "compare.sv", "mux_3to1.sv", "alu.sv", "conv33.sv", "dsp.sv", "RV32E.sv", "instruction_cache_controller.sv",
                            "top.sv", "MemorySlave.sv")
 
+    passed = 0
+
     for i, outputs in enumerate(re.findall(r"^#?\s*(\d+)\s+(\-?\d+)$", output, re.MULTILINE)):
         out_addr, output = map(int, outputs)
         if output != expected_outputs[out_addr]:
             print(f"{out_addr}: {output}!={expected_outputs[out_addr]}")
             return 3
+        passed += 1
     else:
         print(output[:1000])
+
+    print(f"All tests passed ({passed})")
+    return 0
 
 if __name__ == "__main__":
     bin_file = "instructions.bin"
