@@ -102,7 +102,7 @@ module tb_core;
     #(num_instr*CLK_PERIOD*3/2);
 
     for (int i = 4; i < 2**20; i = i + 4) begin
-      $display("%d %d", i, mem[i/4]);
+      $display("%d %d", i, $signed(mem[i/4]));
     end
 
     $finish;
