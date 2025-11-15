@@ -307,7 +307,7 @@ module RV32E (
 
     assign sram_cen  = !rst_n;
     assign sram_addr = alu_result_ex;
-    assign sram_din  = (rs2_addr_ex == 5'd19 ? dsp_out : rs2_data);
+    assign sram_din  = (rs2_addr_ex == 5'd19 ? dsp_out : rs2_data) << (8 * sram_addr[1:0]);
     assign sram_wen  = !mem_write_ex;
 
     // Generate byte enables based on access size and address offset
