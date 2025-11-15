@@ -377,9 +377,9 @@ class InstructionTest(object):
         if inst_name in LOAD:
             sw = ls32("sw", rs2, waddr, rs1)
             if inst_name.endswith('u'):
-                expected = unsigned(v2 << (offset*8), bits)
+                expected = unsigned(v2 >> (offset*8), bits)
             else:
-                expected = signed(v2 << (offset*8), bits)
+                expected = signed(v2 >> (offset*8), bits)
             if not rs2:
                 expected = 0
         elif inst_name in STORE:
