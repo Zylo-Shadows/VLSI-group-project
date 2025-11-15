@@ -612,10 +612,12 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
                            "top.sv", "MemorySlave.sv")
 
     for i, outputs in enumerate(re.findall(r"^#?\s*(\d+)\s+(\-?\d+)$", output, re.MULTILINE)):
-        out_addr, output = output
-        if int(output) != expected_outputs[out_addr]:
+        out_addr, output = map(int, outputs)
+        if output != expected_outputs[out_addr]:
             print(f"{out_addr}: {output}!={expected_outputs[out_addr]}")
             return 3
+    else:
+        print(output[:1000])
 
 if __name__ == "__main__":
     bin_file = "instructions.bin"
