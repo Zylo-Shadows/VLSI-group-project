@@ -26,6 +26,7 @@ module RV32E (
 
     // Register file pipeline signals
     logic [31:0] rs1_data_id, rs2_data_id;
+    logic [31:0] rs1_data_cmp, rs2_data_cmp;
     logic [31:0] rs1_data_ex, rs2_data_ex;
     logic [31:0] rs1_data, rs2_data;
     logic [31:0] rd_data_mem, rd_data_wb;
@@ -242,9 +243,25 @@ module RV32E (
         .src2(src2_id)
     );
 
+    mux_3to1 #(.WIDTH(32)) rs1_cmp_mux (
+        .sel(src1_id),
+        .in0(rs1_data_id),
+        .in1(alu_result_ex),
+        .in2(rd_data_mem),
+        .out(rs1_data_cmp)
+    );
+
+    mux_3to1 #(.WIDTH(32)) rs2_cmp_mux (
+        .sel(src2_id),
+        .in0(rs2_data_id),
+        .in1(alu_result_ex),
+        .in2(rd_data_mem),
+        .out(rs2_data_cmp)
+    );
+
     compare CMPU (
-        .operand_a(rs1_data_id),
-        .operand_b(cmp_imm ? immediate_id : rs2_data_id),
+        .operand_a(rs1_data_cmp),
+        .operand_b(cmp_imm ? immediate_id : rs2_data_cmp),
         .cmp_op(cmp_op),
         .result(cmp_result_id)
     );
