@@ -207,7 +207,7 @@ def lui_offset(rd, imm):
     offset = imm & 0xfff
     if offset >= 0x800:
         offset -= 0x1000
-    return build_inst("lui", rd, imm=ui_bits), offset
+    return build_inst("lui", rd, imm=(ui_bits % 2**20)), offset
 
 def li32(rd, imm):
     """Create lui + addi instructions to load a 32-bit value into a register"""
@@ -305,7 +305,7 @@ class InstructionTest(object):
         if v2 is None:
             v2 = random.randrange(2**32)
         self.inst_name = inst_name
-        self.rd, self.rs1, self.rs2 = rd, rs1, rs2
+        self.rd, self.rs1, self.rs2 = rd, rs1, None if inst_name in OP_IMM else rs2
         self.v1, self.v2 = v1, v2
         self.out_addr = out_addr
         self.lui1, self.offset1 = lui_offset(rs1, v1)
@@ -418,7 +418,7 @@ class InstructionTest(object):
             expected = 0
         else: # MISC
             expected = 0
-        instructions += [*li32(rs2, v2), *sw, self.lui1, addi1, *fill1, self.target_inst, *fill2, *lw]
+        instructions += [*(li32(rs2, v2) if rs2 else []), *sw, self.lui1, addi1, *fill1, self.target_inst, *fill2, *lw]
         instructions += self.extra
         if store_out:
             instructions.extend(ls32("sw", rd, self.out_addr, label=f".l{self.out_addr}_end"))
@@ -553,8 +553,12 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
                     if v1 is None:
                         v1 = random.randrange(2**32)
                     v1 |= 0x100000
-                    if not rs1:
-                        rs1 = random.choice(list(set(regs2test) - {0}))
+                    if inst_name[1] == 'h':
+                        v1 = (v1 >> 1) << 1
+                    elif inst_name[1] == 'w':
+                        v1 = (v1 >> 2) << 2
+                    if not rs1 or rs1 == rs2:
+                        rs1 = random.choice(list(set(regs2test) - {0, rs2}))
                 # else
                 tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rd, v1=v1, v2=v2, out_addr=4*(len(tests)+1)))
                 fillers.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rdb, v1=v1, v2=v2, out_addr=4*(len(tests)+1)))
@@ -629,8 +633,6 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
             print(f"{out_addr}: {output}!={expected_outputs[out_addr]}")
             return 3
         passed += 1
-    else:
-        print(output[:1000])
 
     print(f"All tests passed ({passed})")
     return 0
