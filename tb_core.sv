@@ -94,8 +94,6 @@ module tb_core;
         instr_mem[i] = NOP;
     end
 
-    $display("Instruction memory loaded");
-
     rst_n = 0;
     boot_addr = 32'h00000004;
     #(CLK_PERIOD*5);
@@ -104,7 +102,7 @@ module tb_core;
     #(num_instr*CLK_PERIOD*3/2);
 
     for (int i = 4; i < 2**20; i = i + 4) begin
-      $display("%d", mem[i/4]);
+      $display("%d %d", i, mem[i/4]);
     end
 
     $finish;
