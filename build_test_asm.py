@@ -305,7 +305,8 @@ class InstructionTest(object):
         if v2 is None:
             v2 = random.randrange(2**32)
         self.inst_name = inst_name
-        self.rd, self.rs1, self.rs2 = rd, rs1, None if inst_name in OP_IMM else rs2
+        self.rd = 0 if inst_name in {"nop", *MISC} else rd
+        self.rs1, self.rs2 = rs1, None if inst_name in OP_IMM else rs2
         self.v1, self.v2 = v1, v2
         self.out_addr = out_addr
         self.lui1, self.offset1 = lui_offset(rs1, v1)
