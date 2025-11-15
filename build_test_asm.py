@@ -521,7 +521,7 @@ def test_decode(bin_file, instructions, expected_outputs):
                 return 2
     return 0
 
-def main(bin_file, instructions):
+def main(bin_file, instructions, test_decode=True, test_core=False):
     global FILL
     instructions[:] = [".section .text", ".globl _start", "_start:"]+["nop"]*FILL
     tests = []
@@ -551,9 +551,10 @@ def main(bin_file, instructions):
 
     instructions.extend(["nop"]*FILL)
 
-    exit_code = test_decode(bin_file, instructions, expected_outputs)
-    if exit_code != 0:
-        return exit_code
+    if test_decode:
+        exit_code = test_decode(bin_file, instructions, expected_outputs)
+        if exit_code != 0:
+            return exit_code
 
     FILL = 1
     instructions[:] = [".section .text", ".globl _start", "_start:", "nop"]
@@ -604,7 +605,8 @@ def main(bin_file, instructions):
     except:
         return 1
 
-    output = run_testbench("tb_top", bin_file, "definitions.vh", "types.sv", "pc_reg.v",
+    tb_module = "tb_core" if test_core else "tb_top"
+    output = run_testbench(tb_module, bin_file, "definitions.vh", "types.sv", "pc_reg.v",
                            "register_file.v", "instruction_decoder.sv", "immediate_builder.sv", "dependency_checker.sv",
                            "compare.sv", "mux_4to1.v", "alu.sv", "conv33.sv", "dsp.sv", "RV32E.sv", "instruction_cache_controller.sv",
                            "top.sv", "MemorySlave.sv")
@@ -618,7 +620,9 @@ def main(bin_file, instructions):
 if __name__ == "__main__":
     bin_file = "instructions.bin"
     instructions = []
-    exit_code = main(bin_file, instructions)
+    exit_code = main(bin_file, instructions,
+                     test_decode=("-decode" in sys.argv),
+                     test_core=("-core" in sys.argv))
     if exit_code == 2:
         with open("tb_decode.s", 'w') as f:
             f.write("\n".join(instructions))
