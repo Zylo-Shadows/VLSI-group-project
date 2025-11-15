@@ -37,7 +37,8 @@ module RV32E (
     // ALU operands/results
     logic [31:0] alu_result_ex, alu_result_mem;
 
-    // Memory data
+    // Memory
+    logic  [1:0] mem_offset;
     logic [31:0] mem_data;
 
     // Register addresses
@@ -49,8 +50,8 @@ module RV32E (
     logic mem_write_id, mem_write_ex, mem_write_mem;
     logic branch_id, branch_ex, branch_mem;
     logic jump_id, jump_ex, jump_mem;
-    logic mem_unsigned_id, mem_unsigned_ex;
-    logic [1:0] mem_size_id, mem_size_ex;
+    logic mem_unsigned_id, mem_unsigned_ex, mem_unsigned_mem;
+    logic [1:0] mem_size_id, mem_size_ex, mem_size_mem;
     alu_op_t alu_op_id, alu_op_ex;
 
     // Forwarding
@@ -113,6 +114,8 @@ module RV32E (
             rd_addr_mem     <= 5'b0;
             mem_read_mem    <= 1'b0;
             mem_write_mem   <= 1'b0;
+            mem_size_mem    <= 2'b0;
+            mem_unsigned_mem<= 1'b0;
             branch_mem      <= 1'b0;
             jump_mem        <= 1'b0;
             cmp_mem         <= 1'b0;
@@ -154,6 +157,8 @@ module RV32E (
             rd_addr_mem     <= rd_addr_ex;
             mem_read_mem    <= mem_read_ex;
             mem_write_mem   <= mem_write_ex;
+            mem_size_mem    <= mem_size_ex;
+            mem_unsigned_mem<= mem_unsigned_ex;
             branch_mem      <= branch_ex;
             jump_mem        <= jump_ex;
             cmp_mem         <= cmp_ex;
@@ -323,13 +328,17 @@ module RV32E (
         endcase
     end
 
+    always_ff @(posedge clk) begin
+        mem_offset <= sram_addr[1:0];
+    end
+
     always_comb begin
-        mem_data = sram_dout >> (8 * sram_addr[1:0]);
-        case (mem_size_ex)
+        mem_data = sram_dout >> (8 * mem_offset);
+        case (mem_size_mem)
             2'b00: // byte
-                mem_data[31:8] = mem_unsigned_ex ? 24'b0 : {24{mem_data[7]}};
+                mem_data[31:8] = mem_unsigned_mem ? 24'b0 : {24{mem_data[7]}};
             2'b01: // halfword
-                mem_data[31:16] = mem_unsigned_ex ? 16'b0 : {16{mem_data[15]}};
+                mem_data[31:16] = mem_unsigned_mem ? 16'b0 : {16{mem_data[15]}};
             default:;
         endcase
     end
