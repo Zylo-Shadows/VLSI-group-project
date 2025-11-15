@@ -379,12 +379,20 @@ class InstructionTest(object):
                 expected = unsigned(v2 << (offset*8), bits)
             else:
                 expected = signed(v2 << (offset*8), bits)
+            if not rs2:
+                expected = 0
         elif inst_name in STORE:
             lw = ls32("lw", rd, waddr, rs1)
-            expected = unsigned(v2, bits) << (offset*8)
+            expected = unsigned(v2, bits) << (offset*8) if rs2 else 0
         elif inst_name in {*OP, *OP_IMM} - {"nop"}:
             addi1 = build_inst("addi", rs1, rs1, imm=self.offset1)
             if rd:
+                if rs1 == 0:
+                    v1 = 0
+                if rs2 == 0:
+                    v2 = 0
+                if rs1 == rs2:
+                    v2 = v1
                 expected = signed(int(func[inst_name.replace('i', "")](v1, v2 if rs2 is not None else imm)))
         elif inst_name in BRANCH:
             if rd is None:
@@ -545,6 +553,8 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
                     if v1 is None:
                         v1 = random.randrange(2**32)
                     v1 |= 0x100000
+                    if not rs1:
+                        rs1 = random.choice(list(set(regs2test) - {0}))
                 # else
                 tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rd, v1=v1, v2=v2, out_addr=4*(len(tests)+1)))
                 fillers.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rdb, v1=v1, v2=v2, out_addr=4*(len(tests)+1)))
@@ -560,7 +570,7 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
     instructions[:] = [".section .text", ".globl _start", "_start:", "nop"]
     expected_outputs = {}
 
-    inst_pool = [t.target_inst for t in tests]
+    inst_pool = [t.target_inst for t in tests if t.inst_name not in {*LOAD, *STORE}]
     for filler in fillers:
         filler.extra.extend(random.choices(inst_pool, k=3))
 
