@@ -580,14 +580,29 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
         filler.extra.extend(random.choices(inst_pool, k=3))
 
     for inst_name in BRANCH:
-        for v1, v2 in itertools.product(test_vals, repeat=2):
+        for v1 in test_vals:
+            if v1 is None:
+                v1 = random.randrange(2**32)
+            loop_count = 5
+            if inst_name == "bne" or inst_name.endswith('u'):
+                v1 = unsigned(v1)
+                v2 = v1 + loop_count
+                if unsigned(v2) < v1:
+                    v2 = v1 - loop_count
+            else:
+                v1 = signed(v1)
+                v2 = v1 + loop_count
+                if signed(v2) < v1:
+                    v2 = v1 - loop_count
             for rs1, rs2 in itertools.product(bregs, repeat=2):
                 fill1 = random.choice(fillers)
                 fill2 = random.choice(fillers)
                 tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rdb, v1=v1, v2=v2, out_addr=4*(len(tests)+1),
-                                             fill1=fill1, fill2=fill2, make_loop=True))
-                tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rdb, v1=v1, v2=v2, out_addr=4*(len(tests)+1),
                                              fill1=fill1, fill2=fill2, forward=True))
+                if inst_name == "beq":
+                    continue
+                tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rdb, v1=v1, v2=v2, out_addr=4*(len(tests)+1),
+                                             fill1=fill1, fill2=fill2, make_loop=True))
 
     for inst_name in JUMP:
         for rs1, rs2 in itertools.product(set(regs2test + bregs)-{0}, repeat=2):
