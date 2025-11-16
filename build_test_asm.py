@@ -285,9 +285,8 @@ class InstructionTest(object):
             taken branch. fill1 and fill2 should both have the same rd.
             The branch offset is computed based on the sizes of fill1 and fill2.
             For jumps, fill2 is an InstructionTest representing a function body;
-            If its test sequence is already generated, then it should contain
-            a matching return jump; otherwise, one will be added. If fill2 is
-            a list, then it will be placed after the jump instruction and the
+            it should contain a matching return jump. If fill2 is a list,
+            then it will be placed after the jump instruction and the
             jump instruction will jump past it.
         forward : bool, optional
             Forward branch. Place fill1 after fill2 in this case.
@@ -317,7 +316,6 @@ class InstructionTest(object):
         elif inst_name in JUMP:
             try:
                 jlabel = f"l{fill2.out_addr}"
-                fill2 += "ret"
                 fill2 = []
             except AttributeError:
                 jlabel = f"l{self.out_addr}_end"
@@ -604,6 +602,8 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
                 tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=rdb, v1=v1, v2=v2, out_addr=4*(len(tests)+1),
                                              fill1=fill1, fill2=fill2, make_loop=True))
 
+    functions = {}
+
     for inst_name in JUMP:
         for rs1, rs2 in itertools.product(set(regs2test + bregs)-{0}, repeat=2):
             fill1 = random.choice(fillers)
@@ -619,12 +619,18 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
                 tests.insert(random.randrange(len(tests)), test)
             tests.append(InstructionTest(inst_name, rs1=rs1, rs2=rs2, rd=ra, v1=None, v2=None, out_addr=4*(len(tests)+1),
                                          fill1=fill1, fill2=list(fill2)))
+            functions[fill2.out_addr] = fill2
 
     sequenced = {}
 
     for test in tests:
         if test.out_addr not in sequenced:
             test_sequence, output = test.test_sequence()
+            if test.out_addr in functions:
+                # the body can run on its own or from a function call;
+                # in the former case, we "return" to the next instruction
+                test_sequence.insert(0, f"la x{ra}, .l{test.out_addr}_end+12")
+                test_sequence.append("ret")
             instructions.extend(test_sequence)
             expected_outputs[test.out_addr] = output
             sequenced[test.out_addr] = test_sequence
