@@ -6,7 +6,7 @@ import types::*;
 module tb_core;
 
   parameter CLK_PERIOD = 10; // 100 MHz
-  parameter MAX_INSTR  = 1048576;
+  parameter MAX_INSTR  = 2**22;
 
   logic clk;
   logic rst_n;
