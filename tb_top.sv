@@ -4,7 +4,7 @@ import types::*;
 
 module tb_top;
 
-  parameter MAX_INSTR = 1048576;
+  parameter MAX_INSTR = 2**22;
 
   logic HCLK;
   logic HRESETn;
@@ -73,13 +73,11 @@ module tb_top;
     .sram_dout(sram_dout)
   );
 
-  localparam MEM_SIZE = MAX_INSTR * 4;
-
   //----------------------------------------
   // AHB Memory Slave
   //----------------------------------------
   MemorySlave #(
-    .MEM_SIZE(MEM_SIZE),
+    .MEM_SIZE(MAX_INSTR * 4),
     .LATENCY(2)
   ) mem_slave (
     .HCLK(HCLK),
