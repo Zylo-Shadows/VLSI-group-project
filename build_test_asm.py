@@ -395,10 +395,20 @@ class InstructionTest(object):
                 expected = signed(int(func[inst_name.replace('i', "")](v1, v2 if rs2 is not None else imm)))
         elif inst_name in BRANCH:
             if rd is None:
-                rd = fill2.rd
+                rd = fill2.rd if fill2.rd else fill1.rd
+            # fix expected value loading for MISC fillers
+            extra1, extra2 = "", ""
+            if fill1.rd == 0:
+                extra1 = build_inst("addi", rd=rd, rs1=0, imm=0)
+            if fill2.rd == 0:
+                extra2 = build_inst("addi", rd=rd, rs1=0, imm=0)
+            if rs1 == rs2:
+                v2 = v1
             fill1, expected1 = fill1.test_sequence(store_out=False)
             fill2, expected2 = fill2.test_sequence(store_out=False)
             fill1[0] = f".b{self.out_addr}: " + fill1[0]
+            fill1.append(extra1)
+            fill2.append(extra2)
             if self.forward:
                 # place fill1 after fill2, where lw would normally go
                 fill1, lw = [], fill1
