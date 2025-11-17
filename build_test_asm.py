@@ -657,16 +657,21 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
                            "compare.sv", "mux_4to1.v", "alu.sv", "conv33.sv", "dsp.sv", "RV32E.sv", "instruction_cache_controller.sv",
                            "top.sv", "MemorySlave.sv")
 
-    passed = 0
+    passed = set()
 
     for i, outputs in enumerate(re.findall(r"^#?\s*(\d+)\s+(\-?\d+)$", output, re.MULTILINE)):
         out_addr, output = map(int, outputs)
         if output != expected_outputs[out_addr]:
             print(f"{out_addr}: {output}!={expected_outputs[out_addr]}")
             return 3
-        passed += 1
+        passed.add(out_addr)
 
-    print(f"All tests passed ({passed})")
+    print(f"All outputs matched ({len(passed)}/{len(sequenced)} tested)")
+    if len(passed) < len(sequenced):
+        with open("untested.s", 'w') as f:
+            for out_addr in sequenced.keys() - passed:
+                f.write(f"# {expected_outputs[out_addr]}\n"
+                        f"{"\n".join(sequenced[out_addr])}\n")
     return 0
 
 if __name__ == "__main__":
