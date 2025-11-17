@@ -394,6 +394,7 @@ class InstructionTest(object):
                     v2 = v1
                 expected = signed(int(func[inst_name.replace('i', "")](v1, v2 if rs2 is not None else imm)))
         elif inst_name in BRANCH:
+            addi1 = build_inst("addi", rs1, rs1, imm=self.offset1)
             if rd is None:
                 rd = fill2.rd if fill2.rd else fill1.rd
             # fix expected value loading for MISC fillers
@@ -545,8 +546,8 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
     fillers = []
     expected_outputs = []
 
-    test_vals = [0x80000000, 0, 1, 0x7fffffff, 0xffffffff, None]
-    regs2test = [0, 2, 4, 15]
+    test_vals = [0x80000000, -1, 0, 1, 0x7fffffff, 0xffffffff, None, None, None]
+    regs2test = [0, 2, 4, 8, 15]
     bregs = [7, 9, 11]
     ra, rdb = 1, 3
 
@@ -644,6 +645,8 @@ def main(bin_file, instructions, test_decode=True, test_core=False):
             instructions.extend(test_sequence)
             expected_outputs[test.out_addr] = output
             sequenced[test.out_addr] = test_sequence
+
+    assert len(tests) < 2**20
 
     try:
         instructions.append("nop")
