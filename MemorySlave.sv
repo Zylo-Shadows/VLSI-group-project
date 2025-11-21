@@ -16,7 +16,8 @@ module MemorySlave #(
     output logic        HREADY,
     output logic [1:0]  HRESP,
     input  logic        HSEL,
-    output integer      num_instr
+    output integer      num_instr,
+    output logic        inst_loaded
 );
 
     typedef enum logic [1:0] {
@@ -31,6 +32,7 @@ module MemorySlave #(
     integer fd;
 
     initial begin
+        inst_loaded = 0;
         fd = $fopen("instructions.bin","rb");
         num_instr = $fread(mem, fd);
         $fclose(fd);
@@ -42,6 +44,7 @@ module MemorySlave #(
                 mem[i] = NOP;
         end
 
+        inst_loaded = 1;
         $display("Instruction memory loaded");
     end
 

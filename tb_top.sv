@@ -1,9 +1,11 @@
 `timescale 1ns/1ps
+`include "definitions.vh"
 
 import types::*;
 
 module tb_top;
 
+  parameter CLK_PERIOD = 10; // 100 MHz
   parameter MAX_INSTR = 2**22;
 
   logic HCLK;
@@ -33,19 +35,12 @@ module tb_top;
   logic [31:0] sram_dout;
 
   logic HSEL;
+  logic inst_loaded;
   integer num_instr;
 
   initial begin
     HCLK = 0;
-    forever #5 HCLK = ~HCLK; // 100 MHz clock
-  end
-
-  initial begin
-    HRESETn = 0;
-    boot_addr = 32'h00000004;
-    HSEL = 1'b1;
-    #50;
-    HRESETn = 1;
+    forever #(CLK_PERIOD/2) HCLK = ~HCLK;
   end
 
   top dut (
@@ -91,7 +86,8 @@ module tb_top;
     .HREADY(HREADY),
     .HRESP(HRESP),
     .HSEL(HSEL),
-    .num_instr(num_instr)
+    .num_instr(num_instr),
+    .inst_loaded(inst_loaded)
   );
 
   localparam MEM_SIZE = 2**24;
@@ -119,10 +115,19 @@ module tb_top;
 
   initial begin
     #1;
-    #(num_instr*MEM_SIZE*10);
+    wait (inst_loaded == 1);
+    $display("Loaded %d instructions", num_instr);
+
+    HRESETn = 0;
+    boot_addr = 32'h00000004;
+    HSEL = 1'b1;
+    #(CLK_PERIOD*5);
+    HRESETn = 1;
+
+    #(num_instr*CLK_PERIOD*3/2);
 
     for (int i = 4; i < 2**20; i = i + 4) begin
-      $display("%d", mem[i/4]);
+      $display("%d %d", i, $signed(mem[i/4]));
     end
 
     $finish;
