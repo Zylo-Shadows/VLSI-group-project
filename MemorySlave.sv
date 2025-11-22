@@ -77,10 +77,10 @@ module MemorySlave #(
             addr_reg  <= HADDR;
             write_reg <= HWRITE;
             wdata_reg <= HWDATA;
-        end 
-		  
+        end
+
 		  else if (busy) begin
-            
+
 				if (latency_cnt > 0)
                 latency_cnt <= latency_cnt - 1;
             else begin
@@ -97,24 +97,24 @@ module MemorySlave #(
 end
 
 
-always_comb begin 
+always_comb begin
 automatic logic [31:0] word = mem[addr_reg[$clog2(MEM_SIZE)-1:2]];
         case (HSIZE)
 		  // word based addressing (help from GPT)
 				3'b000: case (addr_reg[1:0])
-				
+
 					2'b00: HRDATA = {24'b0, word[7:0]};
 					2'b01: HRDATA = {24'b0, word[15:8]};
 					2'b10: HRDATA = {24'b0, word[23:16]};
 					2'b11: HRDATA = {24'b0, word[31:24]};
-                    
+
 			   endcase
             3'b001: HRDATA = addr_reg[1] ? {16'b0, word[31:16]} : {16'b0, word[15:0]};
             default: HRDATA = word;
         endcase
     end
     assign HREADY = !busy;
-	 
+
     assign HRESP  = 2'b00;
 
 endmodule

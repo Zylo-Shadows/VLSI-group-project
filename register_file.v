@@ -2,11 +2,11 @@ module register_file (
     input  wire        clk,
     input  wire        rst_n,
     input  wire        write_en,
-    input  wire [4:0]  rs1_addr,  
+    input  wire [4:0]  rs1_addr,
     input  wire [4:0]  rs2_addr,
     input  wire [4:0]  rd_addr,
     input  wire [31:0] rd_data,
-    output reg  [31:0] rs1_data, 
+    output reg  [31:0] rs1_data,
     output reg  [31:0] rs2_data,
     output reg  [31:0] r16,
     output reg  [31:0] r17,
@@ -15,7 +15,7 @@ module register_file (
     // 16+3 registers for DSP
     reg [31:0] regfile [0:18];
     integer i;
- 
+
     always @(posedge clk) begin
         if (!rst_n) begin
             for (i = 0; i < 19; i = i + 1)
