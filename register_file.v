@@ -26,8 +26,8 @@ module register_file (
         end
     end
 
-    assign rs1_data = regfile[rs1_addr];
-    assign rs2_data = regfile[rs2_addr];
+    assign rs1_data = regfile[rs1_addr[3:0]];
+    assign rs2_data = regfile[rs2_addr[3:0]];
 
     assign r16 = regfile[5'd16];
     assign r17 = regfile[5'd17];

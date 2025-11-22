@@ -36,8 +36,8 @@ module instruction_decoder (
     assign rd_addr = instruction[11:7];
     assign funct3 = instruction[14:12];
     // rd <- U-immediate + 0 for LUI
-    assign rs1_addr = (opcode == OP_LUI ? 5'd0 : {1'b0, instruction[18:15]});
-    assign rs2_addr = {1'b0, instruction[23:20]};
+    assign rs1_addr = (opcode == OP_LUI ? 5'd0 : instruction[19:15]);
+    assign rs2_addr = instruction[24:20];
     assign funct7 = instruction[31:25];
 
     always_comb begin
