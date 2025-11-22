@@ -1,22 +1,22 @@
 module conv33 #(
     parameter PIXEL_WIDTH = 8,          // bits per pixel
-    parameter ACCW        = 16          // width of accumulator 
+    parameter ACCW        = 16          // width of accumulator
 )(
     input  logic             clk,  // one tick  per pixel
     input  logic             rst_n,
     input  logic             shift_en, // for gating the shift
     // three input pixels (1 per row)
     input  logic signed [PIXEL_WIDTH-1:0] pix_top, // 8-bit pixel input (for single channel color)
-    input  logic signed [PIXEL_WIDTH-1:0] pix_mid, 
-    input  logic signed [PIXEL_WIDTH-1:0] pix_bot, 
-    
+    input  logic signed [PIXEL_WIDTH-1:0] pix_mid,
+    input  logic signed [PIXEL_WIDTH-1:0] pix_bot,
+
     input  logic [1:0]             mode,   // 0=pass, 1=sharpen, 2=gaussian blur, 3 = edge detect
-    
+
     output logic [PIXEL_WIDTH-1:0] pixel_out
-    
+
 );
 
-    // 3x3 window to apply kernel to 
+    // 3x3 window to apply kernel to
     //  | Column 0 |  Column 1 |  Column 2
     // -------------------------------------
     //  |    t0    |     t1    |   pix_top
@@ -24,11 +24,11 @@ module conv33 #(
     //  |    m0    |     m1    |   pix_mid
     // -------------------------------------
     //  |    b0    |     b1    |   pix_bot
-    logic signed [PIXEL_WIDTH-1:0] t0, t1; // row 0: col0, col1   
+    logic signed [PIXEL_WIDTH-1:0] t0, t1; // row 0: col0, col1
     logic signed [PIXEL_WIDTH-1:0] m0, m1; // row 1: col0, col1
     logic signed [PIXEL_WIDTH-1:0] b0, b1; // row 2: col0, col1
 
-    // sign-extension into accumulator to hold large magnitude convolution sums  
+    // sign-extension into accumulator to hold large magnitude convolution sums
     function automatic logic signed[ACCW-1:0] sx;
        input signed [PIXEL_WIDTH-1:0] v;
        begin
@@ -56,7 +56,7 @@ module conv33 #(
         sx(t0) + (2*sx(t1)) + sx(pix_top)
       + (2*sx(m0)) + (4*sx(m1)) + (2*sx(pix_mid))
       + sx(b0) + (2*sx(b1)) + sx(pix_bot);
-   
+
      assign conv_gaussian = gauss_sum >>> 4; // arithmetic right shift by 4: divide by 2^4
 
     // Edge detection: [-1 -1 -1; -1 8 -1; -1 -1 -1]
@@ -83,7 +83,7 @@ module conv33 #(
     logic signed [ACCW-1:0] selected_kernel;
     always_comb begin
       unique case (mode)
-         2'd0: selected_kernel = pass_through; 
+         2'd0: selected_kernel = pass_through;
          2'd1: selected_kernel = conv_sharpen;
          2'd2: selected_kernel = conv_gaussian;
          2'd3: selected_kernel = conv_edge;
@@ -93,7 +93,7 @@ module conv33 #(
     // output logic
     assign pixel_out = saturate_8bit(selected_kernel);
 
-    
+
     always_ff @(posedge clk) begin
     // reset logic (clear all values if low)
       if (!rst_n) begin
