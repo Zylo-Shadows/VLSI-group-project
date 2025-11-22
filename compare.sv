@@ -9,7 +9,7 @@ module compare (
 
     // Internal signals for comparison results
     logic eq, lt_signed, lt_unsigned;
-    
+
     // Basic comparisons
     assign eq = (operand_a == operand_b);
     assign lt_signed = ($signed(operand_a) < $signed(operand_b));
@@ -18,13 +18,13 @@ module compare (
     // Comparison result logic
     always_comb begin
         case (cmp_op)
-            CMP_EQ:  result = eq;                    
-            CMP_NE:  result = ~eq;                   
-            CMP_LT:  result = lt_signed;             
-            CMP_GE:  result = ~lt_signed;            
-            CMP_LTU: result = lt_unsigned;           
-            CMP_GEU: result = ~lt_unsigned;          
-            default:  result = 1'b0;                 
+            CMP_EQ:  result = eq;
+            CMP_NE:  result = ~eq;
+            CMP_LT:  result = lt_signed;
+            CMP_GE:  result = ~lt_signed;
+            CMP_LTU: result = lt_unsigned;
+            CMP_GEU: result = ~lt_unsigned;
+            default:  result = 1'b0;
         endcase
     end
 

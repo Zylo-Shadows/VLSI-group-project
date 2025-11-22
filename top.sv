@@ -18,7 +18,7 @@ module top (
     output logic        HMASTLOCK,
     output logic  [3:0] HPROT,
 
-    // TCM 
+    // TCM
     output logic        sram_cen,
     output logic        sram_wen,
     output logic [3:0]  sram_ben,
@@ -47,7 +47,7 @@ module top (
         .inst_ready  (imem_ready),
 
         // Data side (connected to TCM)
-		  
+
         .sram_cen    (sram_cen),
         .sram_wen    (sram_wen),
         .sram_ben    (sram_ben),
@@ -56,11 +56,11 @@ module top (
         .sram_dout   (sram_dout)
     );
 
-    
+
     // Instruction cache or AHB bus master
 instruction_cache_controller i_icache (
     // AHB-Lite interface (master port out to memory / interconnect)
-	 // Interface instantiation 
+	 // Interface instantiation
     .HCLK     (HCLK),
     .HRESETn  (HRESETn),
 
@@ -78,7 +78,6 @@ instruction_cache_controller i_icache (
     .cpu_ready  (imem_ready),
 
     .cache_enable (1'b1),     // enable cache always
-    .cache_flush  (1'b0),     // no flush unless you want to debug
     .cache_hit    (cache_hit)
 );
 
