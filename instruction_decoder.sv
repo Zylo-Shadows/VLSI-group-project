@@ -25,11 +25,13 @@ module instruction_decoder (
     output logic         mem_read,
     output logic         mem_write,
     output logic [1:0]   mem_size,
-    output logic         mem_unsigned
+    output logic         mem_unsigned,
+
+    output logic [2:0]   funct3,
+    output logic         csr_valid
 );
 
     opcode_t    opcode;
-    logic [2:0] funct3;
     logic [6:0] funct7;
 
     assign opcode = opcode_t'(instruction[6:0]);
@@ -37,8 +39,10 @@ module instruction_decoder (
     assign funct3 = instruction[14:12];
     // rd <- U-immediate + 0 for LUI
     assign rs1_addr = (opcode == OP_LUI ? 5'd0 : instruction[19:15]);
-    assign rs2_addr = instruction[24:20];
+    assign rs2_addr = (opcode == OP_SYSTEM ? 5'd0 : instruction[24:20]);
     assign funct7 = instruction[31:25];
+
+    assign csr_valid = (opcode == OP_SYSTEM);
 
     always_comb begin
         case (opcode)
