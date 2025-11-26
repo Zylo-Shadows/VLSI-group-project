@@ -31,6 +31,11 @@ module RV32E (
     logic [31:0] rs1_data, rs2_data;
     logic [31:0] rd_data_mem, rd_data_wb;
 
+    // CSR signals
+    logic        csr_valid;
+    logic  [2:0] csr_funct3;
+    logic [31:0] csr_rdata;
+
     // Immediate
     logic [31:0] immediate_id, immediate_ex;
 
@@ -64,6 +69,7 @@ module RV32E (
 
     // DSP
     logic dsp_shift_en;
+    logic [1:0] dsp_mode;
     logic [31:0] r16, r17, r18, dsp_out;
 
     // Branch compare
@@ -230,7 +236,9 @@ module RV32E (
         .mem_read(mem_read_id),
         .mem_write(mem_write_id),
         .mem_size(mem_size_id),
-        .mem_unsigned(mem_unsigned_id)
+        .mem_unsigned(mem_unsigned_id),
+        .csr_funct3(csr_funct3),
+        .csr_valid(csr_valid)
     );
 
     immediate_builder IMMU (
@@ -271,6 +279,20 @@ module RV32E (
         .result(cmp_result_id)
     );
 
+    csr_file csr (
+        .clk(clk),
+        .rst_n(rst_n),
+        .csr_valid(csr_valid),
+        .csr_addr(immediate_id[11:0]),
+        .csr_funct3(csr_funct3),
+        .csr_rs1(rs1_addr),
+        .csr_rd(rd_addr_id),
+        .csr_wdata(rs1_data_cmp),
+        .csr_zimm(rs1_addr)),
+        .csr_rdata(csr_rdata),
+        .dsp_mode(dsp_mode)
+    );
+
     mux_3to1 #(.WIDTH(32)) rs1_data_mux (
         .sel(src1_ex),
         .in0(rs1_data_ex),
@@ -278,6 +300,8 @@ module RV32E (
         .in2(rd_data_wb),
         .out(rs1_data)
     );
+
+    // TODO fix forwarding of CSR reads to ALU
 
     mux_3to1 #(.WIDTH(32)) rs2_data_mux (
         .sel(src2_ex),
@@ -298,7 +322,7 @@ module RV32E (
         .clk(clk),
         .rst_n(rst_n),
         .shift_en(dsp_shift_en),
-        .mode(2'b0),
+        .mode(dsp_mode),
         .top_pix(r16),
         .mid_pix(r17),
         .bot_pix(rd_addr_mem == 5'd18 ? rd_data_mem : r18),
