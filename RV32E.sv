@@ -6,6 +6,8 @@ module RV32E (
     input logic rst_n,
     input logic [31:0] boot_addr,
 
+    output logic        pc_load_id,
+    output logic        pc_load_ex,
     output logic [31:0] inst_addr,
     input  logic [31:0] instruction,
     input  logic inst_ready,
@@ -74,8 +76,8 @@ module RV32E (
 
     // Branch/PC control
     logic branch_taken;
+    logic pc_load;
     logic [31:0] pc_target;
-    logic pc_load_id, pc_load_ex;
     logic [31:0] pc_next;
 
     // Pipeline Register Transfers
@@ -170,13 +172,26 @@ module RV32E (
     end
 
     assign branch_taken = cmp_result_id;
-    assign pc_target = alu_result_ex;
 
     // stall two cycles on branches and jumps to fetch the correct instruction
     assign pc_load_id = jump_id || (branch_id && branch_taken);
 
     always @(posedge clk) begin
-        if (!inst_ready || pc_load_id || pc_load_ex || !rst_n)
+        if (!rst_n)
+            pc_load <= 1'b1;
+        else
+            pc_load <= (pc_load_id || (pc_load && !inst_ready));
+    end
+
+    always @(posedge clk) begin
+        if (!rst_n)
+            pc_target <= boot_addr;
+        else if (pc_load_ex)
+            pc_target <= alu_result_ex;
+    end
+
+    always @(posedge clk) begin
+        if (!inst_ready || pc_load_id || pc_load || !rst_n)
             instruction_id <= NOP;
         else instruction_id <= instruction_if;
     end
@@ -186,8 +201,8 @@ module RV32E (
         .rst_n(rst_n),
         .pc_en(inst_ready),
         .pc_start(boot_addr),
-        .pc_load(pc_load_ex),
-        .pc_in(!rst_n ? boot_addr : pc_target),
+        .pc_load(pc_load),
+        .pc_in(pc_load_ex ? alu_result_ex : pc_target),
         .pc_out(pc_if),
         .pc_plus_4(pc_plus_4_if),
         .pc_next(pc_next)

@@ -29,11 +29,13 @@ module top (
 
     // Core AHB
 
+    logic        pc_load_id;
+    logic        pc_load_ex;
     logic [31:0] imem_addr;
     logic [31:0] imem_rdata;
     logic        imem_ready;
 
-	 logic        cache_hit;
+    logic        cache_hit;
 
 
     RV32E core (
@@ -42,6 +44,8 @@ module top (
         .boot_addr   (boot_addr),
 
         // Instruction side
+        .pc_load_id  (pc_load_id),
+        .pc_load_ex  (pc_load_ex),
         .inst_addr   (imem_addr),
         .instruction (imem_rdata),
         .inst_ready  (imem_ready),
@@ -73,6 +77,8 @@ instruction_cache_controller i_icache (
     .HRESP    (HRESP),
 
     // CPU side — connects to your core’s instruction fetch signals
+    .pc_load_id (pc_load_id),
+    .pc_load_ex (pc_load_ex),
     .cpu_addr   (imem_addr),
     .cpu_data   (imem_rdata),
     .cpu_ready  (imem_ready),

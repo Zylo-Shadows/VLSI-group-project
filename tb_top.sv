@@ -90,7 +90,7 @@ module tb_top;
     .inst_loaded(inst_loaded)
   );
 
-  localparam MEM_SIZE = 2**10;
+  localparam MEM_SIZE = 2**24;
 
   logic [3:0][7:0] mem [0:MEM_SIZE-1];
   logic [$clog2(MEM_SIZE)-1:0] addr;
