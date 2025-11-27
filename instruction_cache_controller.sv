@@ -18,6 +18,8 @@ module instruction_cache_controller #(
     input  logic        HRESP,
 
     // CPU Interface
+    input  logic        pc_load_id,
+    input  logic        pc_load_ex,
     input  logic [31:0] cpu_addr,
     output logic [31:0] cpu_data,
     output logic        cpu_ready,
@@ -101,7 +103,7 @@ module instruction_cache_controller #(
             HTRANS <= HTRANS_IDLE;
         end
         else if (HREADY) begin
-            if (!cache_hit) begin
+            if (HTRANS == HTRANS_IDLE || (pc_load_ex && !cache_hit)) begin
                 fetch_addr <= HADDR;
                 HADDR  <= cpu_addr;
                 HTRANS <= HTRANS_NONSEQ;
@@ -113,6 +115,8 @@ module instruction_cache_controller #(
                 end
                 if (haddr4 - cpu_addr < 4*PREFETCH)
                     HTRANS <= HTRANS_SEQ;
+                else if (pc_load_id)
+                    HTRANS <= HTRANS_IDLE;
                 else
                     HTRANS <= HTRANS_BUSY;
             end
