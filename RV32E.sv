@@ -49,7 +49,7 @@ module RV32E (
 
     // Control signals
     logic mem_read_id, mem_read_ex, mem_read_mem;
-    logic mem_write_id, mem_write_ex, mem_write_mem;
+    logic mem_write_id, mem_write_ex;
     logic branch_id, branch_ex, branch_mem;
     logic jump_id, jump_ex, jump_mem;
     logic mem_unsigned_id, mem_unsigned_ex, mem_unsigned_mem;
@@ -115,7 +115,6 @@ module RV32E (
             alu_result_mem  <= 32'b0;
             rd_addr_mem     <= 5'b0;
             mem_read_mem    <= 1'b0;
-            mem_write_mem   <= 1'b0;
             mem_size_mem    <= 2'b0;
             mem_unsigned_mem<= 1'b0;
             branch_mem      <= 1'b0;
@@ -158,7 +157,6 @@ module RV32E (
             alu_result_mem  <= alu_result_ex;
             rd_addr_mem     <= rd_addr_ex;
             mem_read_mem    <= mem_read_ex;
-            mem_write_mem   <= mem_write_ex;
             mem_size_mem    <= mem_size_ex;
             mem_unsigned_mem<= mem_unsigned_ex;
             branch_mem      <= branch_ex;
@@ -214,7 +212,6 @@ module RV32E (
     register_file regfile (
         .clk(clk),
         .rst_n(rst_n),
-        .write_en(!branch_mem),
         .rs1_addr(rs1_addr),
         .rs2_addr(rs2_addr_id),
         .rd_addr(rd_addr_mem),

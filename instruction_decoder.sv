@@ -33,7 +33,7 @@ module instruction_decoder (
     logic [6:0] funct7;
 
     assign opcode = opcode_t'(instruction[6:0]);
-    assign rd_addr = instruction[11:7];
+    assign rd_addr = (opcode == OP_STORE || opcode == OP_BRANCH ? 5'd0 : instruction[11:7]);
     assign funct3 = instruction[14:12];
     // rd <- U-immediate + 0 for LUI
     assign rs1_addr = (opcode == OP_LUI ? 5'd0 : instruction[19:15]);

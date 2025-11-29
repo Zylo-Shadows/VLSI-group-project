@@ -1,7 +1,6 @@
 module register_file (
     input  wire        clk,
     input  wire        rst_n,
-    input  wire        write_en,
     input  wire [4:0]  rs1_addr,
     input  wire [4:0]  rs2_addr,
     input  wire [4:0]  rd_addr,
@@ -21,7 +20,7 @@ module register_file (
             for (i = 0; i < 19; i = i + 1)
                 regfile[i] <= 32'd0;
         end else begin
-            if (write_en && rd_addr != 5'd0)
+            if (rd_addr != 5'd0)
                 regfile[rd_addr] <= rd_data;
         end
     end
