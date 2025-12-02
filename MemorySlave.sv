@@ -68,29 +68,25 @@ module MemorySlave #(
         write_reg     <= 0;
         wdata_reg     <= 0;
     end else begin
-        if (transfer_logic && !busy) begin
-            busy         <= 1;
-            first_access <= (HTRANS == NONSEQ);
-            latency_cnt  <= (HTRANS == NONSEQ) ? LATENCY-1 : 0;
-
-            // capture request
-            addr_reg  <= HADDR;
-            write_reg <= HWRITE;
-            wdata_reg <= HWDATA;
-        end
-
-		  else if (busy) begin
-
-				if (latency_cnt > 0)
-                latency_cnt <= latency_cnt - 1;
-            else begin
-                // Complete transfer
-                if (write_reg)
-                    mem[addr_reg[9:2]] <= wdata_reg;
-                // For SEQ, increment address
-                if (!write_reg && HTRANS == SEQ)
-                    addr_reg <= addr_reg + 4;
-			    busy <= 0;
+       if (!busy) begin
+                if (HREADY && do_transfer) begin
+                    // Latch address afte transfer
+                    busy        <= 1;
+                    addr_reg    <= HADDR;
+                    write_reg   <= HWRITE;
+                    wdata_reg   <= HWDATA;
+                    // Counter for latency
+                    latency_cnt <= (LATENCY > 0) ? LATENCY - 1 : 0;
+                end 
+		 end else begin
+                // BUSY
+                if (latency_cnt != 0) begin
+                    latency_cnt <= latency_cnt - 1;
+                end else begin
+                    // Transfer complete
+                    if (write_reg)
+                        mem[addr_reg[9:2]] <= wdata_reg;
+                    busy <= 0; 
             end
         end
     end
