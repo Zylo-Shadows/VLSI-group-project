@@ -11,31 +11,27 @@
 
 /* =========================================================================
  * HARDWARE ABSTRACTION LAYER (MMIO MAP)
- * Adjust these addresses to match your specific FPGA/Board implementation.
  * ========================================================================= */
 
-// VGA MMIO
-#define VGA_BASE_ADDR       0xB0000000
+#define MMIO_BASE           0x80000000
+
+// 32-bit Register Layout:
+// [31]    : PS/2 Data Ready (1 = Valid Packet Available)
+// [30:25] : Unused
+// [24]    : VGA VSYNC
+// [23:16] : PS/2 Byte 2 (Delta Y)
+// [15:8]  : PS/2 Byte 1 (Delta X)
+// [7:0]   : PS/2 Byte 0 (Buttons/Signs/Overflow)
+#define MMIO_REG            (*(volatile uint32_t*)MMIO_BASE)
+#define MOUSE_PORT          MMIO_REG
+#define VGA_VSYNC_REG       MMIO_REG
+#define MOUSE_READY_MASK    (1 << 31)
+#define VGA_VSYNC_MASK      (1 << 24)
+
 #define VGA_WIDTH           320
 #define VGA_HEIGHT          200
 
-// VSync Control
-// We monitor bit 0. logic: 1 = Sync Pulse Active, 0 = Active/Front/Back Porch
-#define VGA_VSYNC_REG       (*(volatile uint32_t*)(VGA_BASE_ADDR + 0x04))
-#define VGA_VSYNC_MASK      (1 << 0) 
-
-// Direct VRAM Access
-volatile uint8_t* const VGA_BUFFER = (uint8_t*)0xA0000000; 
-
-// PS/2 MOUSE MMIO (Packet Mode)
-// 32-bit Register Layout:
-// [31]    : Data Ready (1 = Valid Packet Available)
-// [30:24] : Reserved
-// [23:16] : Byte 2 (Delta Y)
-// [15:8]  : Byte 1 (Delta X)
-// [7:0]   : Byte 0 (Buttons/Signs/Overflow)
-#define MOUSE_PORT          (*(volatile uint32_t*)(0xC0000000))
-#define MOUSE_READY_MASK    (1 << 31)
+static uint8_t VGA_BUFFER[VGA_WIDTH * VGA_HEIGHT];
 
 /* =========================================================================
  * GAME CONSTANTS
