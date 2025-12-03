@@ -1,7 +1,7 @@
 /*
  * BARE METAL MINESWEEPER
  * Target: Embedded Core (32-bit recommended, e.g., RISC-V or ARM)
- * Constraints: < 400KB Memory, MMIO VGA, MMIO Mouse
+ * Constraints: < 400KB Memory, MMIO VGA, MMIO Mouse, Race-the-Beam Rendering
  */
 
 #include <stdint.h>
@@ -18,7 +18,13 @@
 #define VGA_BASE_ADDR       0xB0000000
 #define VGA_WIDTH           320
 #define VGA_HEIGHT          200
-// Assuming linear framebuffer at a specific address (or MMIO window)
+
+// VSync Control
+// We monitor bit 0. logic: 1 = Sync Pulse Active, 0 = Active/Front/Back Porch
+#define VGA_VSYNC_REG       (*(volatile uint32_t*)(VGA_BASE_ADDR + 0x04))
+#define VGA_VSYNC_MASK      (1 << 0) 
+
+// Direct VRAM Access
 volatile uint8_t* const VGA_BUFFER = (uint8_t*)0xA0000000; 
 
 // PS/2 MOUSE MMIO
@@ -63,7 +69,7 @@ volatile uint8_t* const VGA_BUFFER = (uint8_t*)0xA0000000;
 // Bits 4-7: Flags
 #define FLAG_REVEALED   (1 << 4)
 #define FLAG_MARKED     (1 << 5)
-#define FLAG_QUESTION   (1 << 6) // Optional
+#define FLAG_QUESTION   (1 << 6)
 
 /* =========================================================================
  * ASSETS (.rodata)
@@ -81,8 +87,8 @@ const uint8_t GLYPHS[12][5] = {
     {0x3C, 0x4A, 0x49, 0x49, 0x30}, // 6
     {0x01, 0x71, 0x09, 0x05, 0x03}, // 7
     {0x36, 0x49, 0x49, 0x49, 0x36}, // 8
-    {0x44, 0x28, 0x10, 0x28, 0x44}, // 9 (Mine - simple X or spike)
-    {0x7F, 0x05, 0x09, 0x1F, 0x08}, // 10 (Flag - P shape)
+    {0x44, 0x28, 0x10, 0x28, 0x44}, // 9 (Mine)
+    {0x7F, 0x05, 0x09, 0x1F, 0x08}, // 10 (Flag)
     {0x08, 0x2A, 0x1C, 0x2A, 0x08}  // 11 (Explosion)
 };
 
@@ -92,7 +98,7 @@ const uint8_t NUMBER_COLORS[] = {
 };
 
 /* =========================================================================
- * GRAPHICS DRIVER
+ * GRAPHICS DRIVER (Direct VRAM)
  * ========================================================================= */
 
 void put_pixel(int x, int y, uint8_t color) {
@@ -147,6 +153,14 @@ void draw_tile_3d(int x, int y, bool pressed) {
         // Right
         draw_rect_filled(x+TILE_SIZE-1-i, y+i, 1, TILE_SIZE-2*i, br);
     }
+}
+
+void wait_vsync() {
+    // Wait for signal to go HIGH (Start of Sync Pulse)
+    while (!(VGA_VSYNC_REG & VGA_VSYNC_MASK));
+    // Wait for signal to go LOW (End of Sync Pulse -> Start of Active/Back Porch)
+    // This aligns our start time exactly when the "beam" resets to top.
+    while (VGA_VSYNC_REG & VGA_VSYNC_MASK);
 }
 
 /* =========================================================================
@@ -261,6 +275,8 @@ void render_board() {
     }
 }
 
+void reveal(int r, int c); // Forward decl
+
 void init_game() {
     memset(board, 0, sizeof(board));
     game_over = false;
@@ -346,18 +362,23 @@ void kernel_main(void) {
     init_game();
     render_board();
     
+    // Draw initial cursor so the loop's first "erase" works correctly
+    draw_cursor();
+
     bool prev_l = false;
     bool prev_r = false;
 
     // 3. Event Loop
     while (1) {
-        // Remove cursor before drawing
-        draw_cursor(); // XOR again to erase
+        // 1. Wait for Start of Frame (VSync Falling Edge)
+        wait_vsync(); 
         
-        // Input
+        // 2. Erase Cursor (Immediate VRAM Update)
+        draw_cursor(); 
+
+        // 3. Input & Game Logic
         poll_mouse();
         
-        // Logic
         int grid_c = (mouse.x - BOARD_OFFSET_X) / TILE_SIZE;
         int grid_r = (mouse.y - BOARD_OFFSET_Y) / TILE_SIZE;
         bool in_grid = (grid_c >= 0 && grid_c < BOARD_COLS && 
@@ -365,20 +386,16 @@ void kernel_main(void) {
 
         if (game_over) {
             if (mouse.left_btn && !prev_l) {
-                // Reset on click
                 init_game();
                 draw_rect_filled(0, 0, VGA_WIDTH, VGA_HEIGHT, COL_CYAN);
                 render_board();
             }
         } else if (in_grid) {
-            // Handle Left Click (Reveal)
             if (mouse.left_btn && !prev_l) {
-                // Seed RNG with human reaction time on first click for better randomness
                 srand(rand() + mouse.x + mouse.y); 
                 reveal(grid_r, grid_c);
                 render_board(); // Naive full redraw (robust)
             }
-            // Handle Right Click (Flag)
             if (mouse.right_btn && !prev_r) {
                 toggle_flag(grid_r, grid_c);
                 render_tile(grid_r, grid_c); // Optimized single redraw
@@ -387,12 +404,5 @@ void kernel_main(void) {
 
         prev_l = mouse.left_btn;
         prev_r = mouse.right_btn;
-
-        // Draw cursor
-        draw_cursor(); // XOR to draw
-
-        // Busy wait delay (mocking ~60fps)
-        // Adjust this loop count based on your core's clock speed
-        for(volatile int i=0; i<50000; i++); 
     }
 }
