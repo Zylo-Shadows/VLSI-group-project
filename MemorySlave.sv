@@ -69,7 +69,7 @@ module MemorySlave #(
         wdata_reg     <= 0;
     end else begin
        if (!busy) begin
-                if (HREADY && do_transfer) begin
+                if (HREADY && transfer_logic) begin
                     // Latch address afte transfer
                     busy        <= 1;
                     addr_reg    <= HADDR;
