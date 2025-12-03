@@ -27,12 +27,15 @@
 // Direct VRAM Access
 volatile uint8_t* const VGA_BUFFER = (uint8_t*)0xA0000000; 
 
-// PS/2 MOUSE MMIO
-#define MOUSE_BASE          0xC0000000
-#define MOUSE_STATUS        (*(volatile uint32_t*)(MOUSE_BASE + 0x00))
-#define MOUSE_DATA          (*(volatile uint32_t*)(MOUSE_BASE + 0x04))
-#define MOUSE_CMD           (*(volatile uint32_t*)(MOUSE_BASE + 0x08))
-#define MOUSE_STATUS_RX_RDY (1 << 0)
+// PS/2 MOUSE MMIO (Packet Mode)
+// 32-bit Register Layout:
+// [31]    : Data Ready (1 = Valid Packet Available)
+// [30:24] : Reserved
+// [23:16] : Byte 2 (Delta Y)
+// [15:8]  : Byte 1 (Delta X)
+// [7:0]   : Byte 0 (Buttons/Signs/Overflow)
+#define MOUSE_PORT          (*(volatile uint32_t*)(0xC0000000))
+#define MOUSE_READY_MASK    (1 << 31)
 
 /* =========================================================================
  * GAME CONSTANTS
@@ -174,46 +177,37 @@ typedef struct {
 } MouseState;
 
 MouseState mouse = {VGA_WIDTH / 2, VGA_HEIGHT / 2, false, false};
-uint8_t mouse_cycle = 0;
-uint8_t mouse_bytes[3];
 
 void poll_mouse() {
-    // Simple polling state machine for standard PS/2 packet (3 bytes)
-    // Byte 0: Yov Xov Ysgn Xsgn 1 M R L
-    // Byte 1: X movement
-    // Byte 2: Y movement
-    
-    while (MOUSE_STATUS & MOUSE_STATUS_RX_RDY) {
-        uint8_t byte = MOUSE_DATA & 0xFF;
-        mouse_bytes[mouse_cycle++] = byte;
+    uint32_t packet = MOUSE_PORT;
 
-        if (mouse_cycle == 3) {
-            mouse_cycle = 0;
-            
-            // Check sync bit (bit 3 of byte 0 should be 1)
-            if (!(mouse_bytes[0] & 0x08)) return; 
+    if (packet & MOUSE_READY_MASK) {
+        uint8_t b0 = packet & 0xFF; // Buttons & Signs
+        
+        // Basic sync check (Bit 3 of Byte 0 must be 1)
+        if (!(b0 & 0x08)) return; 
 
-            bool btn_l = mouse_bytes[0] & 0x01;
-            bool btn_r = mouse_bytes[0] & 0x02;
-            int16_t rel_x = mouse_bytes[1];
-            int16_t rel_y = mouse_bytes[2];
+        bool btn_l = b0 & 0x01;
+        bool btn_r = b0 & 0x02;
+        
+        // Extract 9-bit signed values
+        int16_t rel_x = (packet >> 8) & 0xFF;
+        int16_t rel_y = (packet >> 16) & 0xFF;
 
-            // Sign extension for 9-bit values
-            if (mouse_bytes[0] & 0x10) rel_x |= 0xFF00;
-            if (mouse_bytes[0] & 0x20) rel_y |= 0xFF00;
+        // Apply Sign Bits from Byte 0
+        if (b0 & 0x10) rel_x |= 0xFF00;
+        if (b0 & 0x20) rel_y |= 0xFF00;
 
-            mouse.x += rel_x;
-            mouse.y -= rel_y; // PS/2 Y is bottom-to-top usually
-            
-            // Clamp
-            if (mouse.x < 0) mouse.x = 0;
-            if (mouse.x >= VGA_WIDTH) mouse.x = VGA_WIDTH - 1;
-            if (mouse.y < 0) mouse.y = 0;
-            if (mouse.y >= VGA_HEIGHT) mouse.y = VGA_HEIGHT - 1;
+        mouse.x += rel_x;
+        mouse.y -= rel_y; // PS/2 Y is bottom-to-top usually
+        
+        if (mouse.x < 0) mouse.x = 0;
+        if (mouse.x >= VGA_WIDTH) mouse.x = VGA_WIDTH - 1;
+        if (mouse.y < 0) mouse.y = 0;
+        if (mouse.y >= VGA_HEIGHT) mouse.y = VGA_HEIGHT - 1;
 
-            mouse.left_btn = btn_l;
-            mouse.right_btn = btn_r;
-        }
+        mouse.left_btn = btn_l;
+        mouse.right_btn = btn_r;
     }
 }
 
