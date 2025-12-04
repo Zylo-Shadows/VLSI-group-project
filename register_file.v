@@ -1,15 +1,15 @@
 module register_file (
-    input  wire        clk,
-    input  wire        rst_n,
-    input  wire [4:0]  rs1_addr,
-    input  wire [4:0]  rs2_addr,
-    input  wire [4:0]  rd_addr,
-    input  wire [31:0] rd_data,
-    output reg  [31:0] rs1_data,
-    output reg  [31:0] rs2_data,
-    output reg  [31:0] r16,
-    output reg  [31:0] r17,
-    output reg  [31:0] r18
+    input  wire         clk,
+    input  wire         rst_n,
+    input  wire   [4:0] rs1_addr,
+    input  wire   [4:0] rs2_addr,
+    input  wire   [4:0] rd_addr,
+    input  wire  [31:0] rd_data,
+    output wire  [31:0] rs1_data,
+    output wire  [31:0] rs2_data,
+    output wire  [31:0] r16,
+    output wire  [31:0] r17,
+    output wire  [31:0] r18
 );
     // 16+3 registers for DSP
     reg [31:0] regfile [0:18];
