@@ -1,6 +1,6 @@
 MEMORY
 {
-  RAM (rwx): ORIGIN = 0x00000000, LENGTH = 384K
+  RAM (rwx): ORIGIN = 0x00000000, LENGTH = 96K
 }
 
 OUTPUT_FORMAT("elf32-littleriscv", "elf32-littleriscv", "elf32-littleriscv")

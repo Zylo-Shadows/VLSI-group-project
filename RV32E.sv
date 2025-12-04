@@ -12,6 +12,16 @@ module RV32E (
     input  logic [31:0] instruction,
     input  logic inst_ready,
 
+    output logic [31:0] r16,
+    output logic [31:0] r17,
+    output logic [31:0] r18,
+
+    input  logic [31:0] top_pix,
+    input  logic [31:0] mid_pix,
+    input  logic [31:0] bot_pix,
+    input  logic  [1:0] dsp_mode,
+    output logic        dsp_out,
+
     output logic sram_cen, sram_wen,
     output logic [ 3:0] sram_ben,
     output logic [31:0] sram_addr,
@@ -66,7 +76,6 @@ module RV32E (
 
     // DSP
     logic dsp_shift_en;
-    logic [31:0] r16, r17, r18, dsp_out;
 
     // Branch compare
     logic cmp_id, cmp_ex, cmp_mem;
@@ -310,7 +319,7 @@ module RV32E (
         .clk(clk),
         .rst_n(rst_n),
         .shift_en(dsp_shift_en),
-        .mode(2'b0),
+        .mode(dsp_mode),
         .top_pix(r16),
         .mid_pix(r17),
         .bot_pix(rd_addr_mem == 5'd18 ? rd_data_mem : r18),
