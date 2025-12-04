@@ -17,16 +17,16 @@
 
 // 32-bit Register Layout:
 // [31]    : PS/2 Data Ready (1 = Valid Packet Available)
-// [30:25] : Unused
-// [24]    : VGA VSYNC
+// [30:24] : Reserved
 // [23:16] : PS/2 Byte 2 (Delta Y)
 // [15:8]  : PS/2 Byte 1 (Delta X)
 // [7:0]   : PS/2 Byte 0 (Buttons/Signs/Overflow)
-#define MMIO_REG            (*(volatile uint32_t*)MMIO_BASE)
-#define MOUSE_PORT          MMIO_REG
-#define VGA_VSYNC_REG       MMIO_REG
+#define MOUSE_PORT          (*(volatile uint32_t*)MMIO_BASE)
 #define MOUSE_READY_MASK    (1 << 31)
-#define VGA_VSYNC_MASK      (1 << 24)
+
+#define VGA_REG             (*(volatile uint32_t*)(MMIO_BASE+0x40000000))
+#define VGA_HSYNC_MASK      (1 << 31)
+#define VGA_VSYNC_MASK      (1 << 30)
 
 #define VGA_WIDTH           320
 #define VGA_HEIGHT          200
@@ -155,11 +155,8 @@ void draw_tile_3d(int x, int y, bool pressed) {
 }
 
 void wait_vsync() {
-    // Wait for signal to go HIGH (Start of Sync Pulse)
-    while (!(VGA_VSYNC_REG & VGA_VSYNC_MASK));
-    // Wait for signal to go LOW (End of Sync Pulse -> Start of Active/Back Porch)
-    // This aligns our start time exactly when the "beam" resets to top.
-    while (VGA_VSYNC_REG & VGA_VSYNC_MASK);
+    // Wait for signal to go HIGH (End of Sync Pulse)
+    while (!(VGA_REG & VGA_VSYNC_MASK));
 }
 
 /* =========================================================================
@@ -340,7 +337,7 @@ void toggle_flag(int r, int c) {
  * KERNEL ENTRY POINT
  * ========================================================================= */
 
-void kernel_main(void) {
+int main(void) {
     // 1. Hardware Init
     // (In a real scenario, you might send reset commands to the mouse here)
     srand(123); // Initial seed
@@ -394,5 +391,55 @@ void kernel_main(void) {
 
         prev_l = mouse.left_btn;
         prev_r = mouse.right_btn;
+
+        uint16_t x, y;
+        volatile uint8_t* color_ptr;
+
+        while (VGA_REG & VGA_VSYNC_MASK) {
+            if (!(VGA_REG & VGA_HSYNC_MASK)) {
+                x = VGA_REG & 0x3FF;
+                y = (VGA_REG >> 16) & 0x3FF;
+                if (y > 0) {
+                    color_ptr = &VGA_BUFFER[(y-1) * VGA_WIDTH + x];
+                    __asm__ volatile (
+                        "lw a5, 0(%0)"
+                        :
+                        : "r"(color_ptr)
+                        : "a5"
+                    );
+                    // mv x16, a5
+                    __asm__ volatile (".word 0x00078813");
+                }
+                else {
+                    // mv x16, zero
+                    __asm__ volatile (".word 0x00000813");
+                }
+                color_ptr = &VGA_BUFFER[y * VGA_WIDTH + x];
+                __asm__ volatile (
+                    "lw a5, 0(%0)"
+                    :
+                    : "r"(color_ptr)
+                    : "a5"
+                );
+                // mv x17, a5
+                __asm__ volatile (".word 0x00078893");
+                if (y < VGA_HEIGHT) {
+                    color_ptr = &VGA_BUFFER[(y+1) * VGA_WIDTH + x];
+                    __asm__ volatile (
+                        "lw a5, 0(%0)"
+                        :
+                        : "r"(color_ptr)
+                        : "a5"
+                    );
+                    // mv x18, a5
+                    __asm__ volatile (".word 0x00078913");
+                }
+                else {
+                    // mv x18, zero
+                    __asm__ volatile (".word 0x00000913");
+                }
+            }
+        }
     }
+    return 0;
 }
