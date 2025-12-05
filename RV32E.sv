@@ -214,7 +214,7 @@ module RV32E (
     pc_reg pc (
         .clk(clk),
         .rst_n(rst_n),
-        .pc_en(inst_ready && (!csr_stall || csr_stalled)),
+        .pc_en(inst_ready && (!csr_stall || csr_stalled) && !pc_load_id),
         .pc_start(boot_addr),
         .pc_load(pc_load_ex || pc_load),
         .pc_in(pc_load_ex ? alu_result_ex : pc_target),
@@ -260,7 +260,7 @@ module RV32E (
         .mem_write(mem_write_id),
         .mem_size(mem_size_id),
         .mem_unsigned(mem_unsigned_id),
-        .csr_funct3(csr_funct3),
+        .funct3(csr_funct3),
         .csr_valid(csr_valid)
     );
 
