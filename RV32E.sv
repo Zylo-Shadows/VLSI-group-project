@@ -28,10 +28,15 @@ module RV32E (
 
     // Register file pipeline signals
     logic [31:0] rs1_data_id, rs2_data_id;
-    logic [31:0] rs1_data_cmp, rs2_data_cmp;
+    logic [31:0] rs1_data_csr;
     logic [31:0] rs1_data_ex, rs2_data_ex;
     logic [31:0] rs1_data, rs2_data;
     logic [31:0] rd_data_mem, rd_data_wb;
+
+    // CSR signals
+    logic        csr_valid, csr_stall, csr_stalled;
+    logic  [2:0] csr_funct3;
+    logic [31:0] csr_rdata;
 
     // Immediate
     logic [31:0] immediate_id, immediate_ex;
@@ -66,13 +71,14 @@ module RV32E (
 
     // DSP
     logic dsp_shift_en;
+    logic [1:0] dsp_mode;
     logic [31:0] r16, r17, r18, dsp_out;
 
     // Branch compare
     logic cmp_id, cmp_ex, cmp_mem;
-    logic cmp_imm;
-    cmp_op_t cmp_op;
-    logic cmp_result_id, cmp_result_ex, cmp_result_mem;
+    logic cmp_imm_id, cmp_imm_ex;
+    cmp_op_t cmp_op_id, cmp_op_ex;
+    logic cmp_result_ex, cmp_result_mem;
 
     // Branch/PC control
     logic branch_taken;
@@ -90,9 +96,6 @@ module RV32E (
             // ---------------- ID/EX Reset ----------------
             pc_ex          <= 32'b0;
             pc_plus_4_ex   <= 32'b0;
-            pc_load_ex     <= 1'b1;
-            rs1_data_ex    <= 32'b0;
-            rs2_data_ex    <= 32'b0;
             immediate_ex   <= 32'b0;
             rs2_addr_ex    <= 5'b0;
             rd_addr_ex     <= 5'b0;
@@ -108,7 +111,8 @@ module RV32E (
             branch_ex      <= 1'b0;
             jump_ex        <= 1'b0;
             cmp_ex         <= 1'b0;
-            cmp_result_ex  <= 1'b0;
+            cmp_imm_ex     <= 1'b0;
+            cmp_op_ex      <= cmp_op_t'(3'b0);
 
             // ---------------- EX/MEM Reset ----------------
             pc_plus_4_mem   <= 32'b0;
@@ -132,9 +136,6 @@ module RV32E (
             // ---------------- ID → EX ----------------
             pc_ex          <= pc_id;
             pc_plus_4_ex   <= pc_plus_4_id;
-            pc_load_ex     <= pc_load_id;
-            rs1_data_ex    <= rs1_data_id;
-            rs2_data_ex    <= rs2_data_id;
             immediate_ex   <= immediate_id;
             rs2_addr_ex    <= rs2_addr_id;
             rd_addr_ex     <= rd_addr_id;
@@ -150,7 +151,8 @@ module RV32E (
             branch_ex      <= branch_id;
             jump_ex        <= jump_id;
             cmp_ex         <= cmp_id;
-            cmp_result_ex  <= cmp_result_id;
+            cmp_imm_ex     <= cmp_imm_id;
+            cmp_op_ex      <= cmp_op_id;
 
             // ---------------- EX → MEM ----------------
             pc_plus_4_mem   <= pc_plus_4_ex;
@@ -169,16 +171,17 @@ module RV32E (
         end
     end
 
-    assign branch_taken = cmp_result_id;
+    assign branch_taken = cmp_result_ex;
 
     // stall two cycles on branches and jumps to fetch the correct instruction
-    assign pc_load_id = jump_id || (branch_id && branch_taken);
+    assign pc_load_id = jump_id || branch_id;
+    assign pc_load_ex = jump_ex || (branch_ex && branch_taken);
 
     always @(posedge clk) begin
         if (!rst_n)
             pc_load <= 1'b1;
         else
-            pc_load <= (pc_load_id || (pc_load && !inst_ready));
+            pc_load <= (pc_load_ex || (pc_load && !inst_ready));
     end
 
     always @(posedge clk) begin
@@ -188,8 +191,18 @@ module RV32E (
             pc_target <= alu_result_ex;
     end
 
+    // stall one cycle so CSR forwarding from memory stage works correctly
+    assign csr_stall = (opcode_t'(instruction_if[6:0]) == OP_SYSTEM);
+
     always @(posedge clk) begin
-        if (!inst_ready || pc_load_id || pc_load || !rst_n)
+        if (csr_stalled)
+            csr_stalled <= 1'b0;
+        else
+            csr_stalled <= csr_stall;
+    end
+
+    always @(posedge clk) begin
+        if (!inst_ready || (csr_stall && !csr_stalled) || pc_load_id || pc_load_ex || pc_load || !rst_n)
             instruction_id <= NOP;
         else instruction_id <= instruction_if;
     end
@@ -197,9 +210,9 @@ module RV32E (
     pc_reg pc (
         .clk(clk),
         .rst_n(rst_n),
-        .pc_en(inst_ready),
+        .pc_en(inst_ready && (!csr_stall || csr_stalled) && !pc_load_id),
         .pc_start(boot_addr),
-        .pc_load(pc_load),
+        .pc_load(pc_load_ex || pc_load),
         .pc_in(pc_load_ex ? alu_result_ex : pc_target),
         .pc_out(pc_if),
         .pc_plus_4(pc_plus_4_if),
@@ -234,15 +247,17 @@ module RV32E (
         .branch(branch_id),
         .jump(jump_id),
         .compare(cmp_id),
-        .cmp_imm(cmp_imm),
-        .cmp_op(cmp_op),
+        .cmp_imm(cmp_imm_id),
+        .cmp_op(cmp_op_id),
         .alu_imm(alu_imm_id),
         .alu_pc(alu_pc_id),
         .alu_op(alu_op_id),
         .mem_read(mem_read_id),
         .mem_write(mem_write_id),
         .mem_size(mem_size_id),
-        .mem_unsigned(mem_unsigned_id)
+        .mem_unsigned(mem_unsigned_id),
+        .funct3(csr_funct3),
+        .csr_valid(csr_valid)
     );
 
     immediate_builder IMMU (
@@ -260,28 +275,38 @@ module RV32E (
         .src2(src2_id)
     );
 
-    mux_3to1 #(.WIDTH(32)) rs1_cmp_mux (
+    mux_3to1 #(.WIDTH(32)) rs1_csr_mux (
         .sel(src1_id),
         .in0(rs1_data_id),
         .in1(alu_result_ex),
         .in2(rd_data_mem),
-        .out(rs1_data_cmp)
+        .out(rs1_data_csr)
     );
 
-    mux_3to1 #(.WIDTH(32)) rs2_cmp_mux (
-        .sel(src2_id),
-        .in0(rs2_data_id),
-        .in1(alu_result_ex),
-        .in2(rd_data_mem),
-        .out(rs2_data_cmp)
+    csr_file csr (
+        .clk(clk),
+        .rst_n(rst_n),
+        .csr_valid(csr_valid),
+        .csr_addr(immediate_id[11:0]),
+        .csr_funct3(csr_funct3),
+        .csr_rs1(rs1_addr),
+        .csr_rd(rd_addr_id),
+        .csr_wdata(rs1_data_csr),
+        .csr_zimm(rs1_addr),
+        .csr_rdata(csr_rdata),
+        .dsp_mode(dsp_mode)
     );
 
-    compare CMPU (
-        .operand_a(rs1_data_cmp),
-        .operand_b(cmp_imm ? immediate_id : rs2_data_cmp),
-        .cmp_op(cmp_op),
-        .result(cmp_result_id)
-    );
+    always @(posedge clk) begin
+        if (csr_valid) begin
+            rs1_data_ex <= csr_rdata;
+            rs2_data_ex <= '0;
+        end
+        else begin
+            rs1_data_ex <= rs1_data_id;
+            rs2_data_ex <= rs2_data_id;
+        end
+    end
 
     mux_3to1 #(.WIDTH(32)) rs1_data_mux (
         .sel(src1_ex),
@@ -299,6 +324,13 @@ module RV32E (
         .out(rs2_data)
     );
 
+    compare CMPU (
+        .operand_a(rs1_data),
+        .operand_b(cmp_imm_ex ? immediate_ex : rs2_data),
+        .cmp_op(cmp_op_ex),
+        .result(cmp_result_ex)
+    );
+
     alu ALU (
         .operand_a(alu_pc_ex ? pc_ex : rs1_data),
         .operand_b(alu_imm_ex ? immediate_ex : rs2_data),
@@ -310,7 +342,7 @@ module RV32E (
         .clk(clk),
         .rst_n(rst_n),
         .shift_en(dsp_shift_en),
-        .mode(2'b0),
+        .mode(dsp_mode),
         .top_pix(r16),
         .mid_pix(r17),
         .bot_pix(rd_addr_mem == 5'd18 ? rd_data_mem : r18),
