@@ -4,9 +4,18 @@ module top (
     input  logic        clk,
     input  logic        rst_n,
 
-    // I2C Interface
-    input  logic        scl,
-    inout  logic        sda
+    // Serial Interface (Bootloading)
+    input  logic        serial_rx,
+    output logic        serial_tx,
+    input  logic        boot_mode,
+
+    // Flash SPI
+    output logic        flash_cs_n,
+    output logic        flash_sck,
+    output logic        flash_mosi,
+    input  logic        flash_miso,
+    output logic        flash_wp_n,
+    output logic        flash_hold_n
 );
 
     logic [31:0] boot_addr;
@@ -33,15 +42,6 @@ module top (
     logic        HMASTLOCK;
     logic  [3:0] HPROT;
 
-    // Flash
-    logic [23:0] flash_addr;
-    logic [31:0] flash_wdata;
-    logic [31:0] flash_rdata;
-    logic        flash_we;
-    logic        flash_oe;
-    logic        flash_ce;
-    logic        flash_ready;
-
     logic        pc_load_id;
     logic        pc_load_ex;
     logic [31:0] imem_addr;
@@ -50,8 +50,11 @@ module top (
 
     logic        cache_hit;
 
-    flash_controller i_flash_ctrl (
-        // Clock and Reset
+    flash_controller #(
+        .FLASH_SIZE(32'h100000),
+        .BAUD_RATE(115200),
+        .CLK_FREQ(20000000)
+    ) i_flash_ctrl (
         .clk(clk),
         .rst_n(rst_n),
 
@@ -65,35 +68,23 @@ module top (
         .hwdata(HWDATA),
         .hwrite(HWRITE),
         .hsel(1'b1),
-        .hready(1'b1),
+        .hready_in(1'b1),
         .hrdata(HRDATA),
-        .hreadyout(HREADY),
+        .hready_out(HREADY),
         .hresp(HRESP),
 
-        // I2C Interface
-        .scl(scl),
-        .sda(sda),
+        // Serial Interface (Bootloading)
+        .serial_rx(serial_rx),
+        .serial_tx(serial_tx),
+        .boot_mode(boot_mode),
 
-        // Flash Memory Interface
-        .flash_addr(flash_addr),
-        .flash_wdata(flash_wdata),
-        .flash_rdata(flash_rdata),
-        .flash_we(flash_we),
-        .flash_oe(flash_oe),
-        .flash_ce(flash_ce),
-        .flash_ready(flash_ready)
-    );
-
-    flash_stub flash (
-        .clk(clk),
-        .rst_n(rst_n),
-        .cs_n(!flash_ce),
-        .we_n(!flash_we),
-        .oe_n(!flash_oe),
-        .addr(flash_addr),
-        .wdata(flash_wdata),
-        .rdata(flash_rdata),
-        .ready(flash_ready)
+        // Flash SPI
+        .flash_cs_n(flash_cs_n),
+        .flash_sck(flash_sck),
+        .flash_mosi(flash_mosi),
+        .flash_miso(flash_miso),
+        .flash_wp_n(flash_wp_n),
+        .flash_hold_n(flash_hold_n)
     );
 
     SRAM #(
