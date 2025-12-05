@@ -16,16 +16,16 @@ module top (
     output logic  [2:0] HBURST,
     output logic [31:0] HWDATA,
     output logic        HMASTLOCK,
-    output logic  [3:0] HPROT,
+    output logic  [3:0] HPROT
+);
 
     // TCM
-    output logic        sram_cen,
-    output logic        sram_wen,
-    output logic [3:0]  sram_ben,
-    output logic [31:0] sram_addr,
-    output logic [31:0] sram_din,
-    input  logic [31:0] sram_dout
-);
+    logic        sram_cen;
+    logic        sram_wen;
+    logic  [3:0] sram_ben;
+    logic [31:0] sram_addr;
+    logic [31:0] sram_din;
+    logic [31:0] sram_dout;
 
     // Core AHB
 
@@ -37,6 +37,17 @@ module top (
 
     logic        cache_hit;
 
+    SRAM #(
+        .DEPTH(256)
+    ) sram (
+        .clk      (HCLK),
+        .sram_cen (sram_cen),
+        .sram_wen (sram_wen),
+        .sram_ben (sram_ben),
+        .sram_addr(sram_addr),
+        .sram_din (sram_din),
+        .sram_dout(sram_dout)
+    );
 
     RV32E core (
         .clk         (HCLK),
@@ -62,30 +73,33 @@ module top (
 
 
     // Instruction cache or AHB bus master
-instruction_cache_controller i_icache (
-    // AHB-Lite interface (master port out to memory / interconnect)
-	 // Interface instantiation
-    .HCLK     (HCLK),
-    .HRESETn  (HRESETn),
+    instruction_cache_controller #(
+        .CACHE_SIZE(1024),
+        .BLOCK_SIZE(32)
+    ) i_icache (
+        // AHB-Lite interface (master port out to memory / interconnect)
+        // Interface instantiation
+        .HCLK     (HCLK),
+        .HRESETn  (HRESETn),
 
-	 .HADDR    (HADDR),
-	 .HTRANS   (HTRANS),
-	 .HBURST   (HBURST),
-	 .HSIZE    (HSIZE),
-	 .HRDATA   (HRDATA),
-	 .HREADY   (HREADY),
-    .HRESP    (HRESP),
+        .HADDR    (HADDR),
+        .HTRANS   (HTRANS),
+        .HBURST   (HBURST),
+        .HSIZE    (HSIZE),
+        .HRDATA   (HRDATA),
+        .HREADY   (HREADY),
+        .HRESP    (HRESP),
 
-    // CPU side — connects to your core’s instruction fetch signals
-    .pc_load_id (pc_load_id),
-    .pc_load_ex (pc_load_ex),
-    .cpu_addr   (imem_addr),
-    .cpu_data   (imem_rdata),
-    .cpu_ready  (imem_ready),
+        // CPU side — connects to your core’s instruction fetch signals
+        .pc_load_id (pc_load_id),
+        .pc_load_ex (pc_load_ex),
+        .cpu_addr   (imem_addr),
+        .cpu_data   (imem_rdata),
+        .cpu_ready  (imem_ready),
 
-    .cache_enable (1'b1),     // enable cache always
-    .cache_hit    (cache_hit)
-);
+        .cache_enable (1'b1),     // enable cache always
+        .cache_hit    (cache_hit)
+    );
 
     assign HWRITE    = 1'b0;        // Instruction fetch
     assign HMASTLOCK = 1'b0;        // No locks
