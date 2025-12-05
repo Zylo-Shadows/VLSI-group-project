@@ -28,13 +28,13 @@ module RV32E (
 
     // Register file pipeline signals
     logic [31:0] rs1_data_id, rs2_data_id;
-    logic [31:0] rs1_data_cmp, rs2_data_cmp;
+    logic [31:0] rs1_data_csr;
     logic [31:0] rs1_data_ex, rs2_data_ex;
     logic [31:0] rs1_data, rs2_data;
     logic [31:0] rd_data_mem, rd_data_wb;
 
     // CSR signals
-    logic        csr_valid;
+    logic        csr_valid, csr_stall, csr_stalled;
     logic  [2:0] csr_funct3;
     logic [31:0] csr_rdata;
 
@@ -195,8 +195,18 @@ module RV32E (
             pc_target <= alu_result_ex;
     end
 
+    // stall one cycle so CSR forwarding from memory stage works correctly
+    assign csr_stall = (opcode_t'(instruction_if[6:0]) == OP_SYSTEM);
+
     always @(posedge clk) begin
-        if (!inst_ready || pc_load_id || pc_load_ex || pc_load || !rst_n)
+        if (csr_stalled)
+            csr_stalled <= 1'b0;
+        else
+            csr_stalled <= csr_stall;
+    end
+
+    always @(posedge clk) begin
+        if (!inst_ready || (csr_stall && !csr_stalled) || pc_load_id || pc_load_ex || pc_load || !rst_n)
             instruction_id <= NOP;
         else instruction_id <= instruction_if;
     end
@@ -204,7 +214,7 @@ module RV32E (
     pc_reg pc (
         .clk(clk),
         .rst_n(rst_n),
-        .pc_en(inst_ready),
+        .pc_en(inst_ready && (!csr_stall || csr_stalled)),
         .pc_start(boot_addr),
         .pc_load(pc_load_ex || pc_load),
         .pc_in(pc_load_ex ? alu_result_ex : pc_target),
@@ -269,12 +279,12 @@ module RV32E (
         .src2(src2_id)
     );
 
-    mux_3to1 #(.WIDTH(32)) rs1_cmp_mux (
+    mux_3to1 #(.WIDTH(32)) rs1_csr_mux (
         .sel(src1_id),
         .in0(rs1_data_id),
         .in1(alu_result_ex),
         .in2(rd_data_mem),
-        .out(rs1_data_cmp)
+        .out(rs1_data_csr)
     );
 
     csr_file csr (
@@ -285,8 +295,8 @@ module RV32E (
         .csr_funct3(csr_funct3),
         .csr_rs1(rs1_addr),
         .csr_rd(rd_addr_id),
-        .csr_wdata(rs1_data_cmp),
-        .csr_zimm(rs1_addr)),
+        .csr_wdata(rs1_data_csr),
+        .csr_zimm(rs1_addr),
         .csr_rdata(csr_rdata),
         .dsp_mode(dsp_mode)
     );
