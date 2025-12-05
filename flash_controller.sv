@@ -23,7 +23,7 @@ module flash_controller #(
     input  logic        hready_in,
     output logic        hready_out,
     output logic [31:0] hrdata,
-    output logic [1:0]  hresp,
+    output logic        hresp,
     
     // Flash Memory Interface
     output logic        flash_cs_n,
@@ -166,7 +166,7 @@ module flash_controller #(
     // AHB-Lite response
     assign hready_out = !boot_mode ? (!ahb_phase || flash_done) : 1'b1;
     assign hrdata = flash_data_out;
-    assign hresp = 2'b00; // OKAY response
+    assign hresp = 1'b0; // OKAY response
     
     // Flash SPI Controller
     always_ff @(posedge clk) begin

@@ -60,9 +60,7 @@ module top (
 
         // AHB-Lite Interface
         .haddr(HADDR),
-        .hburst(HBURST),
-        .hmastlock(HMASTLOCK),
-        .hprot(HPROT),
+        // .hburst(HBURST),
         .hsize(HSIZE),
         .htrans(HTRANS),
         .hwdata(HWDATA),
