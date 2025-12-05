@@ -96,8 +96,6 @@ module RV32E (
             // ---------------- ID/EX Reset ----------------
             pc_ex          <= 32'b0;
             pc_plus_4_ex   <= 32'b0;
-            rs1_data_ex    <= 32'b0;
-            rs2_data_ex    <= 32'b0;
             immediate_ex   <= 32'b0;
             rs2_addr_ex    <= 5'b0;
             rd_addr_ex     <= 5'b0;
@@ -138,8 +136,6 @@ module RV32E (
             // ---------------- ID → EX ----------------
             pc_ex          <= pc_id;
             pc_plus_4_ex   <= pc_plus_4_id;
-            rs1_data_ex    <= rs1_data_id;
-            rs2_data_ex    <= rs2_data_id;
             immediate_ex   <= immediate_id;
             rs2_addr_ex    <= rs2_addr_id;
             rd_addr_ex     <= rd_addr_id;
@@ -301,6 +297,17 @@ module RV32E (
         .dsp_mode(dsp_mode)
     );
 
+    always @(posedge clk) begin
+        if (csr_valid) begin
+            rs1_data_ex <= csr_rdata;
+            rs2_data_ex <= '0;
+        end
+        else begin
+            rs1_data_ex <= rs1_data_id;
+            rs2_data_ex <= rs2_data_id;
+        end
+    end
+
     mux_3to1 #(.WIDTH(32)) rs1_data_mux (
         .sel(src1_ex),
         .in0(rs1_data_ex),
@@ -308,8 +315,6 @@ module RV32E (
         .in2(rd_data_wb),
         .out(rs1_data)
     );
-
-    // TODO fix forwarding of CSR reads to ALU
 
     mux_3to1 #(.WIDTH(32)) rs2_data_mux (
         .sel(src2_ex),
