@@ -70,9 +70,9 @@ module RV32E (
 
     // Branch compare
     logic cmp_id, cmp_ex, cmp_mem;
-    logic cmp_imm;
-    cmp_op_t cmp_op;
-    logic cmp_result_id, cmp_result_ex, cmp_result_mem;
+    logic cmp_imm_id, cmp_imm_ex;
+    cmp_op_t cmp_op_id, cmp_op_ex;
+    logic cmp_result_ex, cmp_result_mem;
 
     // Branch/PC control
     logic branch_taken;
@@ -90,7 +90,6 @@ module RV32E (
             // ---------------- ID/EX Reset ----------------
             pc_ex          <= 32'b0;
             pc_plus_4_ex   <= 32'b0;
-            pc_load_ex     <= 1'b1;
             rs1_data_ex    <= 32'b0;
             rs2_data_ex    <= 32'b0;
             immediate_ex   <= 32'b0;
@@ -108,7 +107,8 @@ module RV32E (
             branch_ex      <= 1'b0;
             jump_ex        <= 1'b0;
             cmp_ex         <= 1'b0;
-            cmp_result_ex  <= 1'b0;
+            cmp_imm_ex     <= 1'b0;
+            cmp_op_ex      <= cmp_op_t'(3'b0);
 
             // ---------------- EX/MEM Reset ----------------
             pc_plus_4_mem   <= 32'b0;
@@ -132,7 +132,6 @@ module RV32E (
             // ---------------- ID → EX ----------------
             pc_ex          <= pc_id;
             pc_plus_4_ex   <= pc_plus_4_id;
-            pc_load_ex     <= pc_load_id;
             rs1_data_ex    <= rs1_data_id;
             rs2_data_ex    <= rs2_data_id;
             immediate_ex   <= immediate_id;
@@ -150,7 +149,8 @@ module RV32E (
             branch_ex      <= branch_id;
             jump_ex        <= jump_id;
             cmp_ex         <= cmp_id;
-            cmp_result_ex  <= cmp_result_id;
+            cmp_imm_ex     <= cmp_imm_id;
+            cmp_op_ex      <= cmp_op_id;
 
             // ---------------- EX → MEM ----------------
             pc_plus_4_mem   <= pc_plus_4_ex;
@@ -169,16 +169,17 @@ module RV32E (
         end
     end
 
-    assign branch_taken = cmp_result_id;
+    assign branch_taken = cmp_result_ex;
 
     // stall two cycles on branches and jumps to fetch the correct instruction
-    assign pc_load_id = jump_id || (branch_id && branch_taken);
+    assign pc_load_id = jump_id || branch_id;
+    assign pc_load_ex = jump_ex || (branch_ex && branch_taken);
 
     always @(posedge clk) begin
         if (!rst_n)
             pc_load <= 1'b1;
         else
-            pc_load <= (pc_load_id || (pc_load && !inst_ready));
+            pc_load <= (pc_load_ex || (pc_load && !inst_ready));
     end
 
     always @(posedge clk) begin
@@ -189,7 +190,7 @@ module RV32E (
     end
 
     always @(posedge clk) begin
-        if (!inst_ready || pc_load_id || pc_load || !rst_n)
+        if (!inst_ready || pc_load_id || pc_load_ex || pc_load || !rst_n)
             instruction_id <= NOP;
         else instruction_id <= instruction_if;
     end
@@ -199,7 +200,7 @@ module RV32E (
         .rst_n(rst_n),
         .pc_en(inst_ready),
         .pc_start(boot_addr),
-        .pc_load(pc_load),
+        .pc_load(pc_load_ex || pc_load),
         .pc_in(pc_load_ex ? alu_result_ex : pc_target),
         .pc_out(pc_if),
         .pc_plus_4(pc_plus_4_if),
@@ -234,8 +235,8 @@ module RV32E (
         .branch(branch_id),
         .jump(jump_id),
         .compare(cmp_id),
-        .cmp_imm(cmp_imm),
-        .cmp_op(cmp_op),
+        .cmp_imm(cmp_imm_id),
+        .cmp_op(cmp_op_id),
         .alu_imm(alu_imm_id),
         .alu_pc(alu_pc_id),
         .alu_op(alu_op_id),
@@ -260,29 +261,6 @@ module RV32E (
         .src2(src2_id)
     );
 
-    mux_3to1 #(.WIDTH(32)) rs1_cmp_mux (
-        .sel(src1_id),
-        .in0(rs1_data_id),
-        .in1(alu_result_ex),
-        .in2(rd_data_mem),
-        .out(rs1_data_cmp)
-    );
-
-    mux_3to1 #(.WIDTH(32)) rs2_cmp_mux (
-        .sel(src2_id),
-        .in0(rs2_data_id),
-        .in1(alu_result_ex),
-        .in2(rd_data_mem),
-        .out(rs2_data_cmp)
-    );
-
-    compare CMPU (
-        .operand_a(rs1_data_cmp),
-        .operand_b(cmp_imm ? immediate_id : rs2_data_cmp),
-        .cmp_op(cmp_op),
-        .result(cmp_result_id)
-    );
-
     mux_3to1 #(.WIDTH(32)) rs1_data_mux (
         .sel(src1_ex),
         .in0(rs1_data_ex),
@@ -297,6 +275,13 @@ module RV32E (
         .in1(rd_data_mem),
         .in2(rd_data_wb),
         .out(rs2_data)
+    );
+
+    compare CMPU (
+        .operand_a(rs1_data),
+        .operand_b(cmp_imm_ex ? immediate_ex : rs2_data),
+        .cmp_op(cmp_op_ex),
+        .result(cmp_result_ex)
     );
 
     alu ALU (
