@@ -1,4 +1,4 @@
-module flash_wrapper (
+module flash_stub (
     input  logic        clk,
     input  logic        rst_n,
     input  logic        cs_n,
@@ -10,7 +10,19 @@ module flash_wrapper (
     output logic        ready
 );
 
-    // insert flash macro here
+    logic [31:0] mem [0:15];
+
+    // imitate basic flash logic
+    always_ff @(posedge clk) begin
+        if (!cs_n) begin
+            if (!we_n) begin
+                mem[addr[3:0]] <= wdata;
+            end
+            if (!oe_n) begin
+                rdata <= mem[addr[3:0]];
+            end
+        end
+    end
 
     // Ready signal generation (typical for flash timing)
     always_ff @(posedge clk) begin
